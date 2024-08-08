@@ -67,7 +67,7 @@ setInterval(async () => {
     if (NowDate == SheetCreatedDatePlusWeek) {
         WeekDoc.addSheet({ title: `sheet_${NowDate.toLocaleDateString()}`, headerValues: HeaderValues })
     }
-}, 6000)
+}, 60000)
 const buttonRows = Commands.map((el) => [Keyboard.text(el)])
 const MainKeyboard = Keyboard.from(buttonRows).resized();
 type MyContext = Context & ConversationFlavor;
