@@ -13,6 +13,7 @@ const grammy_1 = require("grammy");
 const dotenv_1 = require("dotenv");
 const google_spreadsheet_1 = require("google-spreadsheet");
 const google_auth_library_1 = require("google-auth-library");
+const promises_1 = require("fs/promises");
 const conversations_1 = require("@grammyjs/conversations");
 (0, dotenv_1.config)();
 let WeekDoc;
@@ -27,7 +28,13 @@ let HeaderValues = [
 const Commands = [
     "Внести транзакцию",
     "Внести транзакцию задним числом",
-    "Вывести еженедельную таблицу"
+    "Вывести еженедельную таблицу",
+    "Настройки"
+];
+const SubCommands = [
+    "Удалить категорию или счет",
+    "Добавить категорию или счет",
+    "Назад"
 ];
 const serviceAccountAuth = new google_auth_library_1.JWT({
     email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
@@ -44,17 +51,6 @@ const GetFileLinkFunction = (Doc, SetSheetID) => {
     var spreadsheetId = Doc.sheetsByIndex[WeekDoc.sheetCount - 1]._spreadsheet.spreadsheetId;
     return SetSheetID ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit?gid=${sheetId}` : `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
 };
-const Category = [
-    "Категория1",
-    "Категория2",
-    "Категория3"
-];
-var Score;
-(function (Score) {
-    Score["\u0421\u0447\u0435\u04421"] = "\u0421\u0447\u0435\u04421";
-    Score["\u0421\u0447\u0435\u04422"] = "\u0421\u0447\u0435\u04422";
-    Score["\u0421\u0447\u0435\u04423"] = "\u0421\u0447\u0435\u04423";
-})(Score || (Score = {}));
 (function () {
     return __awaiter(this, void 0, void 0, function* () {
         WeekDoc = new google_spreadsheet_1.GoogleSpreadsheet(process.env.WEEK_DOC, serviceAccountAuth);
@@ -78,23 +74,34 @@ setInterval(() => __awaiter(void 0, void 0, void 0, function* () {
         WeekDoc.addSheet({ title: `sheet_${NowDate.toLocaleDateString()}`, headerValues: HeaderValues });
     }
 }), 60000);
-const buttonRows = Commands.map((el) => [grammy_1.Keyboard.text(el)]);
-const MainKeyboard = grammy_1.Keyboard.from(buttonRows).resized();
-const ScoreKeyBoard = grammy_1.InlineKeyboard.from(Object.keys(Score).map((el, ind) => [grammy_1.InlineKeyboard.text(el, Object.values(Score)[ind])]));
+const MainKeyboard = grammy_1.Keyboard.from(Commands.map((el) => [grammy_1.Keyboard.text(el)])).resized();
+const SettingsKeyboard = grammy_1.Keyboard.from(SubCommands.map((el) => [grammy_1.Keyboard.text(el)])).resized();
 const FinalKeyBoard = new grammy_1.InlineKeyboard().text("Отправить", "send").text("Выйти", "exit");
-const CategoryKeyBoard = grammy_1.InlineKeyboard.from(Category.map((el, ind) => [grammy_1.InlineKeyboard.text(el)]));
+const SelectKeyboard = new grammy_1.InlineKeyboard().text("Да").text("Нет");
 const bot = new grammy_1.Bot(process.env.BOT_TOKEN);
 bot.use((0, grammy_1.session)({ initial: () => ({}) }));
 bot.use((0, conversations_1.conversations)());
+function loadScoreKeyBoard() {
+    return __awaiter(this, void 0, void 0, function* () {
+        let ReadedData = JSON.parse(yield (0, promises_1.readFile)("./config.json", { encoding: 'utf-8' }));
+        return ReadedData;
+    });
+}
+function write_file(data) {
+    return __awaiter(this, void 0, void 0, function* () {
+        yield (0, promises_1.writeFile)("./config.json", JSON.stringify(data));
+    });
+}
 function addweaktable(conversation, ctx) {
     return __awaiter(this, void 0, void 0, function* () {
-        const mes1 = yield ctx.reply("Выберите счет", { reply_markup: ScoreKeyBoard });
+        var ReadedData = yield loadScoreKeyBoard();
+        const mes1 = yield ctx.reply("Выберите счет", { reply_markup: grammy_1.InlineKeyboard.from(ReadedData.scores.map((el) => [grammy_1.InlineKeyboard.text(el)])) });
         const scoreQuerry = yield conversation.waitFor("callback_query:data");
         const mes2 = yield ctx.reply("Напишите сумму");
         const sum = yield conversation.form.number();
         const mes3 = yield ctx.reply("Напишите ваш комментарий");
         const comment = yield conversation.form.text();
-        const mes4 = yield ctx.reply("Выберите категорию", { reply_markup: CategoryKeyBoard });
+        const mes4 = yield ctx.reply("Выберите категорию", { reply_markup: grammy_1.InlineKeyboard.from(ReadedData.categories.map((el) => [grammy_1.InlineKeyboard.text(el)])) });
         const categoryQuerry = yield conversation.waitFor("callback_query:data");
         const mes5 = yield ctx.reply(`Ваши введенные данные:\n
         <b>Выбранный cчет: ${scoreQuerry.callbackQuery.data}</b>\n
@@ -127,9 +134,57 @@ function addweaktable(conversation, ctx) {
         }
     });
 }
+function on_delete(conversation, ctx) {
+    return __awaiter(this, void 0, void 0, function* () {
+        var ReadedData = yield loadScoreKeyBoard();
+        const mes1 = yield ctx.reply("Выберите,что вы хотите удалить", {
+            reply_markup: new grammy_1.InlineKeyboard().text("Категорию").text("Счет")
+        });
+        var selected_for_delete = yield conversation.waitFor("callback_query:data");
+        const mes2 = yield ctx.reply("Выберите какую категорию вы хотите удалить", {
+            reply_markup: grammy_1.InlineKeyboard.from(selected_for_delete.callbackQuery.data == "Категорию" ? ReadedData.categories.map((el) => [grammy_1.InlineKeyboard.text(el)]) : ReadedData.scores.map((el) => [grammy_1.InlineKeyboard.text(el)]))
+        });
+        var { callbackQuery: { data } } = yield conversation.waitFor("callback_query:data");
+        const mes3 = yield ctx.reply(`Вы точно хотите удалить ${selected_for_delete.callbackQuery.data} под названием: ${data}`, { reply_markup: SelectKeyboard });
+        const selectedYN = yield conversation.waitFor("callback_query:data");
+        ctx.deleteMessages([mes2.message_id, mes1.message_id, mes3.message_id]);
+        if (selectedYN.callbackQuery.data = "Да") {
+            const indexOfElement = selected_for_delete.callbackQuery.data == "Категорию" ? ReadedData.categories.indexOf(data) : ReadedData.scores.indexOf(data);
+            if (indexOfElement > -1) {
+                if (selected_for_delete.callbackQuery.data == "Категорию")
+                    ReadedData.categories.splice(indexOfElement, 1);
+                else
+                    ReadedData.scores.splice(indexOfElement, 1);
+            }
+            write_file(ReadedData);
+            yield ctx.reply("Успешно удалено!");
+        }
+        else {
+            yield ctx.reply("Отмена удаления категории");
+            return;
+        }
+    });
+}
+function on_add(conversation, ctx) {
+    return __awaiter(this, void 0, void 0, function* () {
+        var ReadedData = yield loadScoreKeyBoard();
+        const mes1 = yield ctx.reply("Выберите,что вы хотите добавить", {
+            reply_markup: new grammy_1.InlineKeyboard().text("Категорию").text("Счет")
+        });
+        var { callbackQuery: { data } } = yield conversation.waitFor("callback_query:data");
+        const mes2 = yield ctx.reply("Напишите название");
+        const NewName = yield conversation.form.text();
+        data == "Категорию" ? ReadedData.categories.push(NewName) : ReadedData.scores.push(NewName);
+        write_file(ReadedData);
+        ctx.deleteMessages([mes2.message_id, mes1.message_id]);
+        yield ctx.reply("Успешно добавлено");
+        return;
+    });
+}
 function addweakwithcustomdate(conversation, ctx) {
     return __awaiter(this, void 0, void 0, function* () {
-        const mes1 = yield ctx.reply("Выберите счет", { reply_markup: ScoreKeyBoard });
+        var ReadedData = yield loadScoreKeyBoard();
+        const mes1 = yield ctx.reply("Выберите счет", { reply_markup: grammy_1.InlineKeyboard.from(ReadedData.scores.map((el) => [grammy_1.InlineKeyboard.text(el)])) });
         const scoreQuerry = yield conversation.waitFor("callback_query:data");
         const datemsg = yield ctx.reply("Напишите дату");
         const date = yield conversation.form.text();
@@ -137,7 +192,7 @@ function addweakwithcustomdate(conversation, ctx) {
         const sum = yield conversation.form.number();
         const mes3 = yield ctx.reply("Напишите ваш комментарий");
         const comment = yield conversation.form.text();
-        const mes4 = yield ctx.reply("Выберите категорию", { reply_markup: CategoryKeyBoard });
+        const mes4 = yield ctx.reply("Выберите категорию", { reply_markup: grammy_1.InlineKeyboard.from(ReadedData.categories.map((el) => [grammy_1.InlineKeyboard.text(el)])) });
         const categoryQuerry = yield conversation.waitFor("callback_query:data");
         const mes5 = yield ctx.reply(`Ваши введенные данные:\n
         <b>Выбранный cчет: ${scoreQuerry.callbackQuery.data}</b>\n
@@ -173,14 +228,28 @@ function addweakwithcustomdate(conversation, ctx) {
 }
 bot.use((0, conversations_1.createConversation)(addweaktable, "addtable"));
 bot.use((0, conversations_1.createConversation)(addweakwithcustomdate, "datetable"));
+bot.use((0, conversations_1.createConversation)(on_delete, "delete"));
+bot.use((0, conversations_1.createConversation)(on_add, "add"));
 bot.command("start", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     return yield ctx.reply("Приветствую тебя пользователь. Посмотри мое меню", {
         reply_markup: MainKeyboard
     });
 }));
+bot.hears("Назад", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
+    return yield ctx.reply("Вы вышли в главное меню", {
+        reply_markup: MainKeyboard
+    });
+}));
+bot.hears("Настройки", (ctx) => __awaiter(void 0, void 0, void 0, function* () { return yield ctx.reply("Вы перешли в панель настроек", { reply_markup: SettingsKeyboard }); }));
 bot.command("admin", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     MainDoc.setPublicAccessLevel("writer");
     WeekDoc.setPublicAccessLevel("writer");
+}));
+bot.hears("Удалить категорию или счет", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
+    yield ctx.conversation.enter("delete");
+}));
+bot.hears("Добавить категорию или счет", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
+    yield ctx.conversation.enter("add");
 }));
 bot.command("table", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     yield ctx.reply(`Вот ваша ссылка на таблицу всех транзакций: <a href='https://docs.google.com/spreadsheets/d/${process.env.MAIN_DOC}/edit'>Перейти</a>`, { parse_mode: 'HTML' });
