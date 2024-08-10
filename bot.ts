@@ -10,6 +10,8 @@ import {
     createConversation,
 } from "@grammyjs/conversations";
 config()
+let ChatIds: string[] = [];
+let AddNotificationFor: string[] = ["woodd_i","llicette","goh222"]
 let WeekDoc: GoogleSpreadsheet;
 let MainDoc: GoogleSpreadsheet;
 let HeaderValues = [
@@ -39,6 +41,17 @@ const serviceAccountAuth = new JWT({
         'https://www.googleapis.com/auth/drive.file',
     ]
 });
+type NotType = "add_category" | "delete_category" | "add_score" | "delete_score" | "add_transaction"
+const NotificationSend =(NotifType: NotType) =>{
+    ChatIds.forEach(async element => {
+        await bot.api.sendMessage(element,
+            NotifType == "add_category" ? "Добавлена новая категория!" : 
+            NotifType == "add_score" ? "Добавлен новый счет!" :
+            NotifType == "add_transaction" ? "Добавлена новая транзакция" :
+            NotifType == "delete_category" ? "Удалена категория" :
+            NotifType == "delete_score" ? "Удален счет!" : "")
+    });
+}
 const GetFileLinkFunction = (Doc: GoogleSpreadsheet, SetSheetID?: boolean): string => {
     var sheetId: number | undefined;
     if (SetSheetID) sheetId = Doc.sheetsByIndex[WeekDoc.sheetCount - 1].sheetId
@@ -121,6 +134,7 @@ async function addweaktable(conversation: MyConversation, ctx: MyContext) {
 
             })
             await ctx.reply("Данные успешно отправлены.")
+            NotificationSend("add_transaction");
             ctx.deleteMessages([mes1.message_id, mes2.message_id, mes3.message_id, mes4.message_id, mes5.message_id]);
             break;
         default:
@@ -149,6 +163,7 @@ async function on_delete(conversation: MyConversation, ctx: MyContext) {
             else ReadedData.scores.splice(indexOfElement, 1)
         }
         write_file(ReadedData);
+        NotificationSend( data == "Категорию" ? "delete_category" : "delete_score");
         await ctx.reply("Успешно удалено!");
     } else { await ctx.reply("Отмена удаления категории"); return; }
 }
@@ -163,6 +178,7 @@ async function on_add(conversation: MyConversation, ctx: MyContext) {
     data == "Категорию" ? ReadedData.categories.push(NewName) : ReadedData.scores.push(NewName);
     write_file(ReadedData)
     ctx.deleteMessages([mes2.message_id,mes1.message_id])
+    NotificationSend( data == "Категорию" ? "add_category" : "add_score");
     await ctx.reply("Успешно добавлено")
     return;
 }
@@ -204,6 +220,7 @@ async function addweakwithcustomdate(conversation: MyConversation, ctx: MyContex
 
             })
             await ctx.deleteMessages([mes1.message_id, mes2.message_id, mes3.message_id, mes4.message_id, mes5.message_id, datemsg.message_id]);
+            NotificationSend("add_transaction");
             await ctx.reply("Данные успешно отправлены.")
 
             break;
@@ -224,10 +241,6 @@ bot.hears("Назад", async (ctx) => await ctx.reply("Вы вышли в гл�
     reply_markup: MainKeyboard
 }))
 bot.hears("Настройки", async ctx => await ctx.reply("Вы перешли в панель настроек", { reply_markup: SettingsKeyboard }))
-bot.command("admin", async ctx => {
-    MainDoc.setPublicAccessLevel("writer")
-    WeekDoc.setPublicAccessLevel("writer")
-})
 bot.hears("Удалить категорию или счет", async ctx => {
     await ctx.conversation.enter("delete");
 })
@@ -236,6 +249,20 @@ bot.hears("Добавить категорию или счет", async ctx => {
 })
 bot.command("table", async ctx => {
     await ctx.reply(`Вот ваша ссылка на таблицу всех транзакций: <a href='https://docs.google.com/spreadsheets/d/${process.env.MAIN_DOC}/edit'>Перейти</a>`, { parse_mode: 'HTML' })
+})
+bot.command("update_notifications",async ctx=>{
+    if(AddNotificationFor.indexOf(ctx.chat.username!)>-1){
+        if(ChatIds.indexOf(ctx.chat.id.toString()) ==-1){
+            ChatIds.push(ctx.chat.id.toString());
+            await ctx.reply("Вы обновили систему уведомлений, пока сессия бота активна.");
+        }else{
+            await ctx.reply("Вы уже добавлены в систему уведомлений, пока сессия бота активна.");
+        }
+       
+    }else{
+        await ctx.reply("У вас нет прав на использование этой команды.");
+    }
+    
 })
 bot.command("cancel", async ctx => {
     await ctx.conversation.exit("addtable")

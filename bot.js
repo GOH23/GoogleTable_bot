@@ -16,6 +16,8 @@ const google_auth_library_1 = require("google-auth-library");
 const promises_1 = require("fs/promises");
 const conversations_1 = require("@grammyjs/conversations");
 (0, dotenv_1.config)();
+let ChatIds = [];
+let AddNotificationFor = ["woodd_i", "llicette", "goh222"];
 let WeekDoc;
 let MainDoc;
 let HeaderValues = [
@@ -44,6 +46,15 @@ const serviceAccountAuth = new google_auth_library_1.JWT({
         'https://www.googleapis.com/auth/drive.file',
     ]
 });
+const NotificationSend = (NotifType) => {
+    ChatIds.forEach((element) => __awaiter(void 0, void 0, void 0, function* () {
+        yield bot.api.sendMessage(element, NotifType == "add_category" ? "Добавлена новая категория!" :
+            NotifType == "add_score" ? "Добавлен новый счет!" :
+                NotifType == "add_transaction" ? "Добавлена новая транзакция" :
+                    NotifType == "delete_category" ? "Удалена категория" :
+                        NotifType == "delete_score" ? "Удален счет!" : "");
+    }));
+};
 const GetFileLinkFunction = (Doc, SetSheetID) => {
     var sheetId;
     if (SetSheetID)
@@ -126,6 +137,7 @@ function addweaktable(conversation, ctx) {
                     Категория: categoryQuerry.callbackQuery.data,
                 });
                 yield ctx.reply("Данные успешно отправлены.");
+                NotificationSend("add_transaction");
                 ctx.deleteMessages([mes1.message_id, mes2.message_id, mes3.message_id, mes4.message_id, mes5.message_id]);
                 break;
             default:
@@ -157,6 +169,7 @@ function on_delete(conversation, ctx) {
                     ReadedData.scores.splice(indexOfElement, 1);
             }
             write_file(ReadedData);
+            NotificationSend(data == "Категорию" ? "delete_category" : "delete_score");
             yield ctx.reply("Успешно удалено!");
         }
         else {
@@ -177,6 +190,7 @@ function on_add(conversation, ctx) {
         data == "Категорию" ? ReadedData.categories.push(NewName) : ReadedData.scores.push(NewName);
         write_file(ReadedData);
         ctx.deleteMessages([mes2.message_id, mes1.message_id]);
+        NotificationSend(data == "Категорию" ? "add_category" : "add_score");
         yield ctx.reply("Успешно добавлено");
         return;
     });
@@ -218,6 +232,7 @@ function addweakwithcustomdate(conversation, ctx) {
                     Категория: categoryQuerry.callbackQuery.data,
                 });
                 yield ctx.deleteMessages([mes1.message_id, mes2.message_id, mes3.message_id, mes4.message_id, mes5.message_id, datemsg.message_id]);
+                NotificationSend("add_transaction");
                 yield ctx.reply("Данные успешно отправлены.");
                 break;
             default:
@@ -241,10 +256,6 @@ bot.hears("Назад", (ctx) => __awaiter(void 0, void 0, void 0, function* () 
     });
 }));
 bot.hears("Настройки", (ctx) => __awaiter(void 0, void 0, void 0, function* () { return yield ctx.reply("Вы перешли в панель настроек", { reply_markup: SettingsKeyboard }); }));
-bot.command("admin", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
-    MainDoc.setPublicAccessLevel("writer");
-    WeekDoc.setPublicAccessLevel("writer");
-}));
 bot.hears("Удалить категорию или счет", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     yield ctx.conversation.enter("delete");
 }));
@@ -253,6 +264,20 @@ bot.hears("Добавить категорию или счет", (ctx) => __awai
 }));
 bot.command("table", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     yield ctx.reply(`Вот ваша ссылка на таблицу всех транзакций: <a href='https://docs.google.com/spreadsheets/d/${process.env.MAIN_DOC}/edit'>Перейти</a>`, { parse_mode: 'HTML' });
+}));
+bot.command("update_notifications", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
+    if (AddNotificationFor.indexOf(ctx.chat.username) > -1) {
+        if (ChatIds.indexOf(ctx.chat.id.toString()) == -1) {
+            ChatIds.push(ctx.chat.id.toString());
+            yield ctx.reply("Вы обновили систему уведомлений, пока сессия бота активна.");
+        }
+        else {
+            yield ctx.reply("Вы уже добавлены в систему уведомлений, пока сессия бота активна.");
+        }
+    }
+    else {
+        yield ctx.reply("У вас нет прав на использование этой команды.");
+    }
 }));
 bot.command("cancel", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     yield ctx.conversation.exit("addtable");
