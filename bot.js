@@ -20,6 +20,8 @@ let ChatIds = [];
 let AddNotificationFor = ["woodd_i", "llicette", "goh222"];
 let WeekDoc;
 let MainDoc;
+let maxseconds = { maxMilliseconds: 100000 };
+const locates = "ru-RU";
 let HeaderValues = [
     "Дата транзакции",
     "Счет",
@@ -76,13 +78,13 @@ setInterval(() => __awaiter(void 0, void 0, void 0, function* () {
     let sheet = WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1];
     var NowDate = new Date();
     if (sheet.title.split("_").length != 2) {
-        WeekDoc.addSheet({ title: `sheet_${NowDate.toLocaleDateString()}`, headerValues: HeaderValues });
+        WeekDoc.addSheet({ title: `sheet_${NowDate.toLocaleDateString(locates)}`, headerValues: HeaderValues });
         return;
     }
     var SheetCreatedDate = new Date(sheet.title.split("_")[1]);
     var SheetCreatedDatePlusWeek = new Date(SheetCreatedDate.setDate(SheetCreatedDate.getDate() + 7));
     if (NowDate == SheetCreatedDatePlusWeek) {
-        WeekDoc.addSheet({ title: `sheet_${NowDate.toLocaleDateString()}`, headerValues: HeaderValues });
+        WeekDoc.addSheet({ title: `sheet_${NowDate.toLocaleDateString(locates)}`, headerValues: HeaderValues });
     }
 }), 60000);
 const MainKeyboard = grammy_1.Keyboard.from(Commands.map((el) => [grammy_1.Keyboard.text(el)])).resized();
@@ -98,6 +100,16 @@ function loadScoreKeyBoard() {
         return ReadedData;
     });
 }
+const getMessage = (data, user) => {
+    var _a, _b;
+    const { score, sum, category, comment, date } = data;
+    return `${user ? `Пользователь <a href="tg://user?id=${(_a = user.ctx.chat) === null || _a === void 0 ? void 0 : _a.id}">${(_b = user.ctx.chat) === null || _b === void 0 ? void 0 : _b.username}</a> добавил транзакцию` : `Ваши введенные данные:`} \n
+        <b>Выбранный cчет: <code>${score}</code></b>\n
+        <b>Написанная сумма: <code>${sum}</code></b>\n
+        ${date && `<b>Написанная дата: <code>${date}</code></b>\n`}
+        <b>Написанный комментарий: <code>${comment}</code></b>\n
+        <b>Выбранная категория: <code>${category}</code></b>`;
+};
 function write_file(data) {
     return __awaiter(this, void 0, void 0, function* () {
         yield (0, promises_1.writeFile)("./config.json", JSON.stringify(data));
@@ -105,40 +117,53 @@ function write_file(data) {
 }
 function addweaktable(conversation, ctx) {
     return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b;
         var ReadedData = yield loadScoreKeyBoard();
         const mes1 = yield ctx.reply("Выберите счет", { reply_markup: grammy_1.InlineKeyboard.from(ReadedData.scores.map((el) => [grammy_1.InlineKeyboard.text(el)])) });
         const scoreQuerry = yield conversation.waitFor("callback_query:data");
         const mes2 = yield ctx.reply("Напишите сумму");
-        const sum = yield conversation.form.number();
+        var sumAnswerMessage = yield conversation.wait(Object.assign({}, maxseconds));
+        const sum = (_a = sumAnswerMessage.message) === null || _a === void 0 ? void 0 : _a.text;
         const mes3 = yield ctx.reply("Напишите ваш комментарий");
-        const comment = yield conversation.form.text();
+        var commentAnswerMessage = yield conversation.wait(Object.assign({}, maxseconds));
+        const comment = (_b = commentAnswerMessage.message) === null || _b === void 0 ? void 0 : _b.text;
         const mes4 = yield ctx.reply("Выберите категорию", { reply_markup: grammy_1.InlineKeyboard.from(ReadedData.categories.map((el) => [grammy_1.InlineKeyboard.text(el)])) });
         const categoryQuerry = yield conversation.waitFor("callback_query:data");
-        const mes5 = yield ctx.reply(`Ваши введенные данные:\n
-        <b>Выбранный cчет: ${scoreQuerry.callbackQuery.data}</b>\n
-        <b>Написанная сумма: ${sum}</b>\n
-        <b>Написанный комментарий: ${comment}</b>\n
-        <b>Выбранная категория: ${categoryQuerry.callbackQuery.data}</b>`, { reply_markup: FinalKeyBoard, parse_mode: 'HTML' });
+        /*
+        `Ваши введенные данные:\n
+            <b>Выбранный cчет: <code>${scoreQuerry.callbackQuery.data}</code></b>\n
+            <b>Написанная сумма: <code>${sum}</code></b>\n
+            <b>Написанный комментарий: <code>${comment}</code></b>\n
+            <b>Выбранная категория: <code>${categoryQuerry.callbackQuery.data}</code></b>`
+        */
+        const mes5 = yield ctx.reply(getMessage({ score: scoreQuerry.callbackQuery.data, sum: sum, comment: comment, category: categoryQuerry.callbackQuery.data }), { reply_markup: FinalKeyBoard, parse_mode: 'HTML' });
         const finalQuerryData = yield conversation.waitFor("callback_query:data");
         switch (finalQuerryData.callbackQuery.data) {
             case "send":
                 WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].addRow({
-                    "Дата транзакции": new Date().toLocaleDateString(),
+                    "Дата транзакции": new Date().toLocaleDateString(locates),
                     Счет: scoreQuerry.callbackQuery.data,
                     Сумма: sum,
                     Комментарий: comment,
                     Категория: categoryQuerry.callbackQuery.data
                 });
                 MainDoc.sheetsByIndex[0].addRow({
-                    "Дата транзакции": new Date().toLocaleDateString(),
+                    "Дата транзакции": new Date().toLocaleDateString(locates),
                     Счет: scoreQuerry.callbackQuery.data,
                     Сумма: sum,
                     Комментарий: comment,
                     Категория: categoryQuerry.callbackQuery.data,
                 });
-                yield ctx.reply("Данные успешно отправлены.");
+                /*
+                `Пользователь <a href="tg://user?id=${ctx.chat?.id}">${ctx.chat?.username}</a> добавил транзакцию\n
+                    <b>Выбранный cчет: <code>${scoreQuerry.callbackQuery.data}</code></b>\n
+                    <b>Написанная сумма: <code>${sum}</code></b>\n
+                    <b>Написанный комментарий: <code>${comment}</code></b>\n
+                    <b>Выбранная категория: <code>${categoryQuerry.callbackQuery.data}</code></b>`
+                */
+                yield ctx.reply(getMessage({ score: scoreQuerry.callbackQuery.data, sum: sum, comment: comment, category: categoryQuerry.callbackQuery.data }, { ctx }), { parse_mode: 'HTML' });
                 NotificationSend("add_transaction");
-                ctx.deleteMessages([mes1.message_id, mes2.message_id, mes3.message_id, mes4.message_id, mes5.message_id]);
+                ctx.deleteMessages([mes1.message_id, mes2.message_id, mes3.message_id, mes4.message_id, mes5.message_id, sumAnswerMessage.msgId, commentAnswerMessage.msgId]);
                 break;
             default:
                 yield ctx.reply("Вы вышли из создания транзакции.");
@@ -197,23 +222,22 @@ function on_add(conversation, ctx) {
 }
 function addweakwithcustomdate(conversation, ctx) {
     return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b, _c;
         var ReadedData = yield loadScoreKeyBoard();
         const mes1 = yield ctx.reply("Выберите счет", { reply_markup: grammy_1.InlineKeyboard.from(ReadedData.scores.map((el) => [grammy_1.InlineKeyboard.text(el)])) });
-        const scoreQuerry = yield conversation.waitFor("callback_query:data");
+        const scoreQuerry = yield conversation.waitFor("callback_query:data", Object.assign({}, maxseconds));
         const datemsg = yield ctx.reply("Напишите дату");
-        const date = yield conversation.form.text();
+        var dateAnswerMessage = yield conversation.wait(Object.assign({}, maxseconds));
+        const date = (_a = dateAnswerMessage.message) === null || _a === void 0 ? void 0 : _a.text;
         const mes2 = yield ctx.reply("Напишите сумму");
-        const sum = yield conversation.form.number();
+        var sumAnswerMessage = yield conversation.wait(Object.assign({}, maxseconds));
+        const sum = (_b = sumAnswerMessage.message) === null || _b === void 0 ? void 0 : _b.text;
         const mes3 = yield ctx.reply("Напишите ваш комментарий");
-        const comment = yield conversation.form.text();
+        var commentAnswerMessage = yield conversation.wait(Object.assign({}, maxseconds));
+        const comment = (_c = commentAnswerMessage.message) === null || _c === void 0 ? void 0 : _c.text;
         const mes4 = yield ctx.reply("Выберите категорию", { reply_markup: grammy_1.InlineKeyboard.from(ReadedData.categories.map((el) => [grammy_1.InlineKeyboard.text(el)])) });
         const categoryQuerry = yield conversation.waitFor("callback_query:data");
-        const mes5 = yield ctx.reply(`Ваши введенные данные:\n
-        <b>Выбранный cчет: ${scoreQuerry.callbackQuery.data}</b>\n
-        <b>Написанная дата: ${date}</b>\n
-        <b>Написанная сумма: ${sum}</b>\n
-        <b>Написанный комментарий: ${comment}</b>\n
-        <b>Выбранная категория: ${categoryQuerry.callbackQuery.data}</b>`, { reply_markup: FinalKeyBoard, parse_mode: 'HTML' });
+        const mes5 = yield ctx.reply(getMessage({ score: scoreQuerry.callbackQuery.data, sum: sum, comment: comment, category: categoryQuerry.callbackQuery.data, date: date }), { reply_markup: FinalKeyBoard, parse_mode: 'HTML' });
         const finalQuerryData = yield conversation.waitFor("callback_query:data");
         switch (finalQuerryData.callbackQuery.data) {
             case "send":
@@ -231,9 +255,9 @@ function addweakwithcustomdate(conversation, ctx) {
                     Комментарий: comment,
                     Категория: categoryQuerry.callbackQuery.data,
                 });
-                yield ctx.deleteMessages([mes1.message_id, mes2.message_id, mes3.message_id, mes4.message_id, mes5.message_id, datemsg.message_id]);
+                yield ctx.deleteMessages([mes1.message_id, mes2.message_id, mes3.message_id, mes4.message_id, mes5.message_id, datemsg.message_id, sumAnswerMessage.msgId, commentAnswerMessage.msgId, dateAnswerMessage.msgId]);
                 NotificationSend("add_transaction");
-                yield ctx.reply("Данные успешно отправлены.");
+                yield ctx.reply(getMessage({ score: scoreQuerry.callbackQuery.data, sum: sum, comment: comment, category: categoryQuerry.callbackQuery.data, date: date }, { ctx }), { parse_mode: 'HTML' });
                 break;
             default:
                 yield ctx.reply("Вы вышли из создания транзакции.");
@@ -246,9 +270,12 @@ bot.use((0, conversations_1.createConversation)(addweakwithcustomdate, "datetabl
 bot.use((0, conversations_1.createConversation)(on_delete, "delete"));
 bot.use((0, conversations_1.createConversation)(on_add, "add"));
 bot.command("start", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
-    return yield ctx.reply("Приветствую тебя пользователь. Посмотри мое меню", {
+    const { message_id } = yield ctx.reply("Приветствую тебя пользователь. Посмотри мое меню", {
         reply_markup: MainKeyboard
     });
+    setTimeout(() => __awaiter(void 0, void 0, void 0, function* () {
+        yield ctx.deleteMessages([message_id]);
+    }), 2000);
 }));
 bot.hears("Назад", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     return yield ctx.reply("Вы вышли в главное меню", {
