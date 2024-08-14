@@ -106,7 +106,7 @@ const getMessage = (data, user) => {
     return `${user ? `Пользователь <a href="tg://user?id=${(_a = user.ctx.chat) === null || _a === void 0 ? void 0 : _a.id}">${(_b = user.ctx.chat) === null || _b === void 0 ? void 0 : _b.username}</a> добавил транзакцию` : `Ваши введенные данные:`} \n
         <b>Выбранный cчет: <code>${score}</code></b>\n
         <b>Написанная сумма: <code>${sum}</code></b>\n
-        ${date && `<b>Написанная дата: <code>${date}</code></b>\n`}
+        ${date ? `<b>Написанная дата: <code>${date}</code></b>\n` : ``}
         <b>Написанный комментарий: <code>${comment}</code></b>\n
         <b>Выбранная категория: <code>${category}</code></b>`;
 };
@@ -255,6 +255,21 @@ function addweakwithcustomdate(conversation, ctx) {
                     Комментарий: comment,
                     Категория: categoryQuerry.callbackQuery.data,
                 });
+                const rows = (yield WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].getRows());
+                const sortedRows = rows.sort((a, b) => {
+                    return new Date(a.get("Дата транзакции")) < new Date(b.get("Дата транзакции")) ? 1 : -1; // Adjust 'Column1' to your actual column header
+                });
+                yield WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].clear();
+                yield WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].setHeaderRow(HeaderValues);
+                Promise.all(yield WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].addRows(sortedRows.map((el) => {
+                    return {
+                        "Дата транзакции": el.get("Дата транзакции"),
+                        Счет: el.get("Счет"),
+                        Сумма: el.get("Сумма"),
+                        Комментарий: el.get("Комментарий"),
+                        Категория: el.get("Категория")
+                    };
+                })));
                 yield ctx.deleteMessages([mes1.message_id, mes2.message_id, mes3.message_id, mes4.message_id, mes5.message_id, datemsg.message_id, sumAnswerMessage.msgId, commentAnswerMessage.msgId, dateAnswerMessage.msgId]);
                 NotificationSend("add_transaction");
                 yield ctx.reply(getMessage({ score: scoreQuerry.callbackQuery.data, sum: sum, comment: comment, category: categoryQuerry.callbackQuery.data, date: date }, { ctx }), { parse_mode: 'HTML' });

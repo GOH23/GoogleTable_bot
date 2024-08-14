@@ -99,7 +99,7 @@ async function loadScoreKeyBoard(): Promise<JsonData> {
     let ReadedData = JSON.parse(await readFile("./config.json", { encoding: 'utf-8' }))
     return ReadedData!
 }
-const getMessage = (data: { score: string, sum: string, comment: string, category: string, date?: string },user?: {ctx: MyContext}): string => {
+const getMessage = (data: { score: string, sum: string, comment: string, category: string, date?: string }, user?: { ctx: MyContext }): string => {
     const { score, sum, category, comment, date } = data
     return `${user ? `Пользователь <a href="tg://user?id=${user.ctx.chat?.id}">${user.ctx.chat?.username}</a> добавил транзакцию` : `Ваши введенные данные:`} \n
         <b>Выбранный cчет: <code>${score}</code></b>\n
@@ -130,7 +130,7 @@ async function addweaktable(conversation: MyConversation, ctx: MyContext) {
         <b>Написанный комментарий: <code>${comment}</code></b>\n
         <b>Выбранная категория: <code>${categoryQuerry.callbackQuery.data}</code></b>`
     */
-    const mes5 = await ctx.reply( getMessage({score: scoreQuerry.callbackQuery.data,sum: sum,comment: comment,category: categoryQuerry.callbackQuery.data}), { reply_markup: FinalKeyBoard, parse_mode: 'HTML' })
+    const mes5 = await ctx.reply(getMessage({ score: scoreQuerry.callbackQuery.data, sum: sum, comment: comment, category: categoryQuerry.callbackQuery.data }), { reply_markup: FinalKeyBoard, parse_mode: 'HTML' })
     const finalQuerryData = await conversation.waitFor("callback_query:data")
     switch (finalQuerryData.callbackQuery.data) {
         case "send":
@@ -141,6 +141,7 @@ async function addweaktable(conversation: MyConversation, ctx: MyContext) {
                 Комментарий: comment,
                 Категория: categoryQuerry.callbackQuery.data
             })
+
             MainDoc.sheetsByIndex[0].addRow({
                 "Дата транзакции": new Date().toLocaleDateString(locates),
                 Счет: scoreQuerry.callbackQuery.data,
@@ -156,7 +157,7 @@ async function addweaktable(conversation: MyConversation, ctx: MyContext) {
                 <b>Написанный комментарий: <code>${comment}</code></b>\n
                 <b>Выбранная категория: <code>${categoryQuerry.callbackQuery.data}</code></b>`
             */
-            await ctx.reply(getMessage({score: scoreQuerry.callbackQuery.data,sum: sum,comment: comment,category: categoryQuerry.callbackQuery.data},{ctx}), { parse_mode: 'HTML' })
+            await ctx.reply(getMessage({ score: scoreQuerry.callbackQuery.data, sum: sum, comment: comment, category: categoryQuerry.callbackQuery.data }, { ctx }), { parse_mode: 'HTML' })
             NotificationSend("add_transaction");
             ctx.deleteMessages([mes1.message_id, mes2.message_id, mes3.message_id, mes4.message_id, mes5.message_id, sumAnswerMessage.msgId!, commentAnswerMessage.msgId!]);
             break;
@@ -220,7 +221,7 @@ async function addweakwithcustomdate(conversation: MyConversation, ctx: MyContex
     const comment: string = commentAnswerMessage.message?.text!;
     const mes4 = await ctx.reply("Выберите категорию", { reply_markup: InlineKeyboard.from(ReadedData.categories.map((el) => [InlineKeyboard.text(el)])) });
     const categoryQuerry = await conversation.waitFor("callback_query:data");
-    const mes5 = await ctx.reply(getMessage({score: scoreQuerry.callbackQuery.data,sum: sum,comment: comment,category: categoryQuerry.callbackQuery.data,date: date}), { reply_markup: FinalKeyBoard, parse_mode: 'HTML' });
+    const mes5 = await ctx.reply(getMessage({ score: scoreQuerry.callbackQuery.data, sum: sum, comment: comment, category: categoryQuerry.callbackQuery.data, date: date }), { reply_markup: FinalKeyBoard, parse_mode: 'HTML' });
 
     const finalQuerryData = await conversation.waitFor("callback_query:data")
 
@@ -240,9 +241,24 @@ async function addweakwithcustomdate(conversation: MyConversation, ctx: MyContex
                 Комментарий: comment,
                 Категория: categoryQuerry.callbackQuery.data,
             })
+            const rows = (await WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].getRows())
+            const sortedRows = rows.sort((a, b) => {
+                return new Date(a.get("Дата транзакции")) < new Date(b.get("Дата транзакции")) ? 1 : -1; // Adjust 'Column1' to your actual column header
+            });
+            await WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].clear();
+            await WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].setHeaderRow(HeaderValues);
+            Promise.all(await WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].addRows(sortedRows.map((el) => {
+                return {
+                    "Дата транзакции": el.get("Дата транзакции"),
+                    Счет: el.get("Счет"),
+                    Сумма:  el.get("Сумма"),
+                    Комментарий:  el.get("Комментарий"),
+                    Категория: el.get("Категория")
+                }
+            })))
             await ctx.deleteMessages([mes1.message_id, mes2.message_id, mes3.message_id, mes4.message_id, mes5.message_id, datemsg.message_id, sumAnswerMessage.msgId!, commentAnswerMessage.msgId!, dateAnswerMessage.msgId!]);
             NotificationSend("add_transaction");
-            await ctx.reply(getMessage({score: scoreQuerry.callbackQuery.data,sum: sum,comment: comment,category: categoryQuerry.callbackQuery.data,date: date},{ctx}), { parse_mode: 'HTML' })
+            await ctx.reply(getMessage({ score: scoreQuerry.callbackQuery.data, sum: sum, comment: comment, category: categoryQuerry.callbackQuery.data, date: date }, { ctx }), { parse_mode: 'HTML' })
             break;
         default:
             await ctx.reply("Вы вышли из создания транзакции.")
