@@ -227,20 +227,20 @@ async function addweakwithcustomdate(conversation: MyConversation, ctx: MyContex
 
     switch (finalQuerryData.callbackQuery.data) {
         case "send":
-            WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].addRow({
+            Promise.all([await WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].addRow({
                 "Дата транзакции": date,
                 Счет: scoreQuerry.callbackQuery.data,
                 Сумма: sum,
                 Комментарий: comment,
                 Категория: categoryQuerry.callbackQuery.data
-            })
-            MainDoc.sheetsByIndex[0].addRow({
+            }),
+            await MainDoc.sheetsByIndex[0].addRow({
                 "Дата транзакции": date,
                 Счет: scoreQuerry.callbackQuery.data,
                 Сумма: sum,
                 Комментарий: comment,
                 Категория: categoryQuerry.callbackQuery.data,
-            })
+            })])
             const rows = (await WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].getRows())
             const sortedRows = rows.sort((a, b) => {
                 return new Date(a.get("Дата транзакции")) < new Date(b.get("Дата транзакции")) ? 1 : -1; // Adjust 'Column1' to your actual column header

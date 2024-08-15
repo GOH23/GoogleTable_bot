@@ -241,23 +241,23 @@ function addweakwithcustomdate(conversation, ctx) {
         const finalQuerryData = yield conversation.waitFor("callback_query:data");
         switch (finalQuerryData.callbackQuery.data) {
             case "send":
-                WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].addRow({
-                    "Дата транзакции": date,
-                    Счет: scoreQuerry.callbackQuery.data,
-                    Сумма: sum,
-                    Комментарий: comment,
-                    Категория: categoryQuerry.callbackQuery.data
-                });
-                MainDoc.sheetsByIndex[0].addRow({
-                    "Дата транзакции": date,
-                    Счет: scoreQuerry.callbackQuery.data,
-                    Сумма: sum,
-                    Комментарий: comment,
-                    Категория: categoryQuerry.callbackQuery.data,
-                });
+                Promise.all([yield WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].addRow({
+                        "Дата транзакции": date,
+                        Счет: scoreQuerry.callbackQuery.data,
+                        Сумма: sum,
+                        Комментарий: comment,
+                        Категория: categoryQuerry.callbackQuery.data
+                    }),
+                    yield MainDoc.sheetsByIndex[0].addRow({
+                        "Дата транзакции": date,
+                        Счет: scoreQuerry.callbackQuery.data,
+                        Сумма: sum,
+                        Комментарий: comment,
+                        Категория: categoryQuerry.callbackQuery.data,
+                    })]);
                 const rows = (yield WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].getRows());
                 const sortedRows = rows.sort((a, b) => {
-                    return new Date(a.get("Дата транзакции")) < new Date(b.get("Дата транзакции")) ? 1 : -1; // Adjust 'Column1' to your actual column header
+                    return new Date(a.get("Дата транзакции")) > new Date(b.get("Дата транзакции")) ? 1 : -1; // Adjust 'Column1' to your actual column header
                 });
                 yield WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].clear();
                 yield WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].setHeaderRow(HeaderValues);
