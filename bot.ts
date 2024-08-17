@@ -62,6 +62,7 @@ const GetFileLinkFunction = (Doc: GoogleSpreadsheet, SetSheetID?: boolean): stri
 }
 
 (async function () {
+
     WeekDoc = new GoogleSpreadsheet(process.env.WEEK_DOC!, serviceAccountAuth);
     MainDoc = new GoogleSpreadsheet(process.env.MAIN_DOC!, serviceAccountAuth);
     await MainDoc.loadInfo();
@@ -69,18 +70,20 @@ const GetFileLinkFunction = (Doc: GoogleSpreadsheet, SetSheetID?: boolean): stri
     await WeekDoc.loadInfo()
 })();
 setInterval(async () => {
+
     let sheet = WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1];
     var NowDate = new Date();
     if (sheet.title.split("_").length != 2) {
         WeekDoc.addSheet({ title: `sheet_${NowDate.toLocaleDateString(locates)}`, headerValues: HeaderValues })
         return;
     }
-    var SheetCreatedDate = new Date(sheet.title.split("_")[1])
-    var SheetCreatedDatePlusWeek = new Date(SheetCreatedDate.setDate(SheetCreatedDate.getDate() + 7));
-    if (NowDate == SheetCreatedDatePlusWeek) {
+    var dateSplit = sheet.title.split("_")[1].trim().split(".")
+    var SheetCreatedDate = new Date(`${dateSplit[2]}.${dateSplit[1]}.${dateSplit[0]}`)
+    SheetCreatedDate.setDate(SheetCreatedDate.getDate() + 7);
+    if (NowDate >= SheetCreatedDate) {
         WeekDoc.addSheet({ title: `sheet_${NowDate.toLocaleDateString(locates)}`, headerValues: HeaderValues })
     }
-}, 60000)
+}, 10000)
 const MainKeyboard = Keyboard.from(Commands.map((el) => [Keyboard.text(el)])).resized();
 const SettingsKeyboard = Keyboard.from(SubCommands.map((el) => [Keyboard.text(el)])).resized();
 const FinalKeyBoard = new InlineKeyboard().text("Отправить", "send").text("Выйти", "exit")
@@ -92,6 +95,11 @@ type JsonData = {
     categories: string[], scores: string[]
 }
 const bot = new Bot<MyContext>(process.env.BOT_TOKEN!);
+bot.api.setMyCommands([
+    { command: "start", description: "Вывести главное меню бота" },
+    { command: "table", description: "Вывести главную таблицу" },
+    { command: 'sort', description: "Отсортировать таблицу" }
+]);
 bot.use(session({ initial: () => ({}) }));
 bot.use(conversations())
 
@@ -123,13 +131,6 @@ async function addweaktable(conversation: MyConversation, ctx: MyContext) {
     const comment: string = commentAnswerMessage.message?.text!;
     const mes4 = await ctx.reply("Выберите категорию", { reply_markup: InlineKeyboard.from(ReadedData.categories.map((el) => [InlineKeyboard.text(el)])) });
     const categoryQuerry = await conversation.waitFor("callback_query:data");
-    /*
-    `Ваши введенные данные:\n
-        <b>Выбранный cчет: <code>${scoreQuerry.callbackQuery.data}</code></b>\n
-        <b>Написанная сумма: <code>${sum}</code></b>\n
-        <b>Написанный комментарий: <code>${comment}</code></b>\n
-        <b>Выбранная категория: <code>${categoryQuerry.callbackQuery.data}</code></b>`
-    */
     const mes5 = await ctx.reply(getMessage({ score: scoreQuerry.callbackQuery.data, sum: sum, comment: comment, category: categoryQuerry.callbackQuery.data }), { reply_markup: FinalKeyBoard, parse_mode: 'HTML' })
     const finalQuerryData = await conversation.waitFor("callback_query:data")
     switch (finalQuerryData.callbackQuery.data) {
@@ -150,13 +151,7 @@ async function addweaktable(conversation: MyConversation, ctx: MyContext) {
                 Категория: categoryQuerry.callbackQuery.data,
 
             })
-            /*
-            `Пользователь <a href="tg://user?id=${ctx.chat?.id}">${ctx.chat?.username}</a> добавил транзакцию\n
-                <b>Выбранный cчет: <code>${scoreQuerry.callbackQuery.data}</code></b>\n
-                <b>Написанная сумма: <code>${sum}</code></b>\n
-                <b>Написанный комментарий: <code>${comment}</code></b>\n
-                <b>Выбранная категория: <code>${categoryQuerry.callbackQuery.data}</code></b>`
-            */
+
             await ctx.reply(getMessage({ score: scoreQuerry.callbackQuery.data, sum: sum, comment: comment, category: categoryQuerry.callbackQuery.data }, { ctx }), { parse_mode: 'HTML' })
             NotificationSend("add_transaction");
             ctx.deleteMessages([mes1.message_id, mes2.message_id, mes3.message_id, mes4.message_id, mes5.message_id, sumAnswerMessage.msgId!, commentAnswerMessage.msgId!]);
@@ -241,21 +236,8 @@ async function addweakwithcustomdate(conversation: MyConversation, ctx: MyContex
                 Комментарий: comment,
                 Категория: categoryQuerry.callbackQuery.data,
             })])
-            const rows = (await WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].getRows())
-            const sortedRows = rows.sort((a, b) => {
-                return new Date(a.get("Дата транзакции")) < new Date(b.get("Дата транзакции")) ? 1 : -1; // Adjust 'Column1' to your actual column header
-            });
-            await WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].clear();
-            await WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].setHeaderRow(HeaderValues);
-            Promise.all(await WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1].addRows(sortedRows.map((el) => {
-                return {
-                    "Дата транзакции": el.get("Дата транзакции"),
-                    Счет: el.get("Счет"),
-                    Сумма:  el.get("Сумма"),
-                    Комментарий:  el.get("Комментарий"),
-                    Категория: el.get("Категория")
-                }
-            })))
+
+
             await ctx.deleteMessages([mes1.message_id, mes2.message_id, mes3.message_id, mes4.message_id, mes5.message_id, datemsg.message_id, sumAnswerMessage.msgId!, commentAnswerMessage.msgId!, dateAnswerMessage.msgId!]);
             NotificationSend("add_transaction");
             await ctx.reply(getMessage({ score: scoreQuerry.callbackQuery.data, sum: sum, comment: comment, category: categoryQuerry.callbackQuery.data, date: date }, { ctx }), { parse_mode: 'HTML' })
@@ -266,6 +248,7 @@ async function addweakwithcustomdate(conversation: MyConversation, ctx: MyContex
     }
 
 }
+
 bot.use(createConversation(addweaktable, "addtable"));
 bot.use(createConversation(addweakwithcustomdate, "datetable"))
 bot.use(createConversation(on_delete, "delete"));
@@ -278,6 +261,31 @@ bot.command("start", async (ctx) => {
         await ctx.deleteMessages([message_id]);
     }, 2000)
 });
+bot.command("sort", async ctx => {
+    var sheet = WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1];
+    const rows = (await sheet.getRows())
+    const sortedRows = rows.sort((a, b) => {
+        var dateA = new Date(a.get("Дата транзакции")).getTime();
+        var dateB = new Date(b.get("Дата транзакции")).getTime();
+        return dateA > dateB ? 1 : -1;
+    });
+    await sheet.clear();
+    await sheet.setHeaderRow(HeaderValues);
+
+    Promise.all(await sheet.addRows(sortedRows.map((el) => {
+        return {
+            "Дата транзакции": el.get("Дата транзакции"),
+            Счет: el.get("Счет"),
+            Сумма: el.get("Сумма"),
+            Комментарий: el.get("Комментарий"),
+            Категория: el.get("Категория")
+        }
+    })))
+    const { message_id } = await ctx.reply("Успешная сортировка")
+    setTimeout(async () => {
+        await ctx.deleteMessages([message_id]);
+    }, 2000)
+})
 bot.hears("Назад", async (ctx) => await ctx.reply("Вы вышли в главное меню", {
     reply_markup: MainKeyboard
 }))
