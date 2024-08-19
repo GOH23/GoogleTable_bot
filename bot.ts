@@ -1,6 +1,6 @@
 import { Bot, Context, InlineKeyboard, Keyboard, session } from "grammy";
 import { config } from "dotenv";
-import { GoogleSpreadsheet } from 'google-spreadsheet';
+import { GoogleSpreadsheet, GoogleSpreadsheetRow } from 'google-spreadsheet';
 import { JWT } from "google-auth-library"
 import { readFile, writeFile } from 'fs/promises'
 import {
@@ -70,7 +70,6 @@ const GetFileLinkFunction = (Doc: GoogleSpreadsheet, SetSheetID?: boolean): stri
     await WeekDoc.loadInfo()
 })();
 setInterval(async () => {
-
     let sheet = WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1];
     var NowDate = new Date();
     if (sheet.title.split("_").length != 2) {
@@ -91,13 +90,15 @@ const SelectKeyboard = new InlineKeyboard().text("Да").text("Нет")
 
 type MyContext = Context & ConversationFlavor;
 type MyConversation = Conversation<MyContext>;
+type UserType ={ user_id: string,chat_id: string}
 type JsonData = {
-    categories: string[], scores: string[]
+    categories: string[], scores: string[],user: UserType[]
 }
 const bot = new Bot<MyContext>(process.env.BOT_TOKEN!);
 bot.api.setMyCommands([
     { command: "start", description: "Вывести главное меню бота" },
     { command: "table", description: "Вывести главную таблицу" },
+    { command: "edit", description: "Изменить данные в еженедельной таблице" },
     { command: 'sort', description: "Отсортировать таблицу" }
 ]);
 bot.use(session({ initial: () => ({}) }));
@@ -248,11 +249,56 @@ async function addweakwithcustomdate(conversation: MyConversation, ctx: MyContex
     }
 
 }
+async function on_edit(conversation: MyConversation, ctx: MyContext) {
+    var ReadedData = await loadScoreKeyBoard();
+    var sheet = WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1];
+    const rows = (await sheet.getRows())
+    var rowMessage = "Выберите транзакцию по айди из списка\n"
+    HeaderValues.map((el)=>{
+        rowMessage += `${el} `
+    })
+    rowMessage+="\n"
+    rows.map((el,ind)=>{
+        rowMessage+=`<b>${el.get("Дата транзакции")} ${el.get("Счет")} ${el.get("Сумма")} ${el.get("Комментарий")} ${el.get("Категория")}</b>\n`
+    })
+    const mes1 = await ctx.reply(rowMessage,{parse_mode: 'HTML',reply_markup: InlineKeyboard.from(rows.map((_el,ind)=>[InlineKeyboard.text(ind.toString())]))});
+    var {callbackQuery} = await conversation.waitFor("callback_query:data",{ ...maxseconds });
+    ctx.deleteMessages([mes1.message_id])
+    var row :  GoogleSpreadsheetRow<Record<string, any>> = rows[Number(callbackQuery.data)] 
+    const mes2 = await ctx.reply("Вы хотите изменить \"Дату транзакции\"",{reply_markup: InlineKeyboard.from([[InlineKeyboard.text('Оставить без изменений')]])})
+    var data1 = await conversation.wait({ ...maxseconds });
+    let dateVal = data1.message?.text ? data1.message.text : row.get("Дата транзакции");
+    ctx.deleteMessages([mes2.message_id])
+    const mes3 = await ctx.reply("Вы хотите изменить \"Счет\"",{reply_markup: InlineKeyboard.from([[InlineKeyboard.text('Оставить без изменений')],...ReadedData.scores.map(el=>[InlineKeyboard.text(el)])])})
+    var data2 = await conversation.waitFor("callback_query:data",{ ...maxseconds });
+    let ScoreVal = data2.callbackQuery.data == "Оставить без изменений" ? row.get("Счет") : data2.callbackQuery.data;
+    ctx.deleteMessages([mes3.message_id]);
+    const mes4 = await ctx.reply("Вы хотите изменить \"Сумма\"",{reply_markup: InlineKeyboard.from([[InlineKeyboard.text('Оставить без изменений')]])})
+    var data1 = await conversation.wait({ ...maxseconds });
+    let sumVal = data1.message?.text ? data1.message.text : row.get("Сумма");
+    ctx.deleteMessages([mes4.message_id]);
+    const mes5 = await ctx.reply("Вы хотите изменить \"Комментарий\"",{reply_markup: InlineKeyboard.from([[InlineKeyboard.text('Оставить без изменений')]])})
+    var data1 = await conversation.wait({ ...maxseconds });
+    let commentVal = data1.message?.text ? data1.message.text : row.get("Комментарий");
+    ctx.deleteMessages([mes5.message_id]);
+    const mes6 = await ctx.reply("Вы хотите изменить \"Категория\"",{reply_markup: InlineKeyboard.from([[InlineKeyboard.text('Оставить без изменений')],...ReadedData.categories.map(el=>[InlineKeyboard.text(el)])])})
+    var data2 = await conversation.waitFor("callback_query:data",{ ...maxseconds });
+    let CategoryVal = data2.callbackQuery.data == "Оставить без изменений" ? row.get("Категория") : data2.callbackQuery.data;
+    ctx.deleteMessages([mes6.message_id]);
+    row.set("Дату транзакции",dateVal);
+    row.set("Счет",ScoreVal);
+    row.set("Сумма",sumVal);
+    row.set("Комментарий",commentVal)
+    row.set("Категория",CategoryVal);
+    await row.save();
+    await ctx.reply("Успешно сохранено.")
 
+}
 bot.use(createConversation(addweaktable, "addtable"));
 bot.use(createConversation(addweakwithcustomdate, "datetable"))
 bot.use(createConversation(on_delete, "delete"));
 bot.use(createConversation(on_add, "add"));
+bot.use(createConversation(on_edit,'edit'))
 bot.command("start", async (ctx) => {
     const { message_id } = await ctx.reply("Приветствую тебя пользователь. Посмотри мое меню", {
         reply_markup: MainKeyboard
@@ -261,6 +307,9 @@ bot.command("start", async (ctx) => {
         await ctx.deleteMessages([message_id]);
     }, 2000)
 });
+bot.command("edit",async ctx=>{
+    await ctx.conversation.enter('edit');
+})
 bot.command("sort", async ctx => {
     var sheet = WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1];
     const rows = (await sheet.getRows())
@@ -317,8 +366,19 @@ bot.command("cancel", async ctx => {
     await ctx.conversation.exit("addtable")
     await ctx.conversation.exit("datetable");
 })
-bot.hears("Внести транзакцию", ctx => ctx.conversation.enter("addtable"))
-bot.hears("Внести транзакцию задним числом", ctx => ctx.conversation.enter("datetable"))
+bot.hears("Внести транзакцию", ctx => {
+    ctx.conversation.enter("addtable")
+    setInterval(() => {
+        ctx.deleteMessage()
+    }, 10000)
+})
+bot.hears("Внести транзакцию задним числом", ctx => {
+    ctx.conversation.enter("datetable")
+    setInterval(() => {
+        ctx.deleteMessage()
+    }, 10000)
+
+})
 bot.hears("Вывести еженедельную таблицу", async ctx => {
     await ctx.reply(`Вот ваша ссылка на таблицу этой недели: <a href='${GetFileLinkFunction(WeekDoc, true)}'>Перейти</a>`, { parse_mode: 'HTML' })
 })

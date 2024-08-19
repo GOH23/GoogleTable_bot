@@ -96,6 +96,7 @@ const bot = new grammy_1.Bot(process.env.BOT_TOKEN);
 bot.api.setMyCommands([
     { command: "start", description: "Вывести главное меню бота" },
     { command: "table", description: "Вывести главную таблицу" },
+    { command: "edit", description: "Изменить данные в еженедельной таблице" },
     { command: 'sort', description: "Отсортировать таблицу" }
 ]);
 bot.use((0, grammy_1.session)({ initial: () => ({}) }));
@@ -257,10 +258,58 @@ function addweakwithcustomdate(conversation, ctx) {
         }
     });
 }
+function on_edit(conversation, ctx) {
+    return __awaiter(this, void 0, void 0, function* () {
+        var _a, _b, _c;
+        var ReadedData = yield loadScoreKeyBoard();
+        var sheet = WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1];
+        const rows = (yield sheet.getRows());
+        var rowMessage = "Выберите транзакцию по айди из списка\n";
+        HeaderValues.map((el) => {
+            rowMessage += `${el} `;
+        });
+        rowMessage += "\n";
+        rows.map((el, ind) => {
+            rowMessage += `<b>${el.get("Дата транзакции")} ${el.get("Счет")} ${el.get("Сумма")} ${el.get("Комментарий")} ${el.get("Категория")}</b>\n`;
+        });
+        const mes1 = yield ctx.reply(rowMessage, { parse_mode: 'HTML', reply_markup: grammy_1.InlineKeyboard.from(rows.map((_el, ind) => [grammy_1.InlineKeyboard.text(ind.toString())])) });
+        var { callbackQuery } = yield conversation.waitFor("callback_query:data", Object.assign({}, maxseconds));
+        ctx.deleteMessages([mes1.message_id]);
+        var row = rows[Number(callbackQuery.data)];
+        const mes2 = yield ctx.reply("Вы хотите изменить \"Дату транзакции\"", { reply_markup: grammy_1.InlineKeyboard.from([[grammy_1.InlineKeyboard.text('Оставить без изменений')]]) });
+        var data1 = yield conversation.wait(Object.assign({}, maxseconds));
+        let dateVal = ((_a = data1.message) === null || _a === void 0 ? void 0 : _a.text) ? data1.message.text : row.get("Дата транзакции");
+        ctx.deleteMessages([mes2.message_id]);
+        const mes3 = yield ctx.reply("Вы хотите изменить \"Счет\"", { reply_markup: grammy_1.InlineKeyboard.from([[grammy_1.InlineKeyboard.text('Оставить без изменений')], ...ReadedData.scores.map(el => [grammy_1.InlineKeyboard.text(el)])]) });
+        var data2 = yield conversation.waitFor("callback_query:data", Object.assign({}, maxseconds));
+        let ScoreVal = data2.callbackQuery.data == "Оставить без изменений" ? row.get("Счет") : data2.callbackQuery.data;
+        ctx.deleteMessages([mes3.message_id]);
+        const mes4 = yield ctx.reply("Вы хотите изменить \"Сумма\"", { reply_markup: grammy_1.InlineKeyboard.from([[grammy_1.InlineKeyboard.text('Оставить без изменений')]]) });
+        var data1 = yield conversation.wait(Object.assign({}, maxseconds));
+        let sumVal = ((_b = data1.message) === null || _b === void 0 ? void 0 : _b.text) ? data1.message.text : row.get("Сумма");
+        ctx.deleteMessages([mes4.message_id]);
+        const mes5 = yield ctx.reply("Вы хотите изменить \"Комментарий\"", { reply_markup: grammy_1.InlineKeyboard.from([[grammy_1.InlineKeyboard.text('Оставить без изменений')]]) });
+        var data1 = yield conversation.wait(Object.assign({}, maxseconds));
+        let commentVal = ((_c = data1.message) === null || _c === void 0 ? void 0 : _c.text) ? data1.message.text : row.get("Комментарий");
+        ctx.deleteMessages([mes5.message_id]);
+        const mes6 = yield ctx.reply("Вы хотите изменить \"Категория\"", { reply_markup: grammy_1.InlineKeyboard.from([[grammy_1.InlineKeyboard.text('Оставить без изменений')], ...ReadedData.categories.map(el => [grammy_1.InlineKeyboard.text(el)])]) });
+        var data2 = yield conversation.waitFor("callback_query:data", Object.assign({}, maxseconds));
+        let CategoryVal = data2.callbackQuery.data == "Оставить без изменений" ? row.get("Категория") : data2.callbackQuery.data;
+        ctx.deleteMessages([mes6.message_id]);
+        row.set("Дату транзакции", dateVal);
+        row.set("Счет", ScoreVal);
+        row.set("Сумма", sumVal);
+        row.set("Комментарий", commentVal);
+        row.set("Категория", CategoryVal);
+        yield row.save();
+        yield ctx.reply("Успешно сохранено.");
+    });
+}
 bot.use((0, conversations_1.createConversation)(addweaktable, "addtable"));
 bot.use((0, conversations_1.createConversation)(addweakwithcustomdate, "datetable"));
 bot.use((0, conversations_1.createConversation)(on_delete, "delete"));
 bot.use((0, conversations_1.createConversation)(on_add, "add"));
+bot.use((0, conversations_1.createConversation)(on_edit, 'edit'));
 bot.command("start", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     const { message_id } = yield ctx.reply("Приветствую тебя пользователь. Посмотри мое меню", {
         reply_markup: MainKeyboard
@@ -268,6 +317,9 @@ bot.command("start", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     setTimeout(() => __awaiter(void 0, void 0, void 0, function* () {
         yield ctx.deleteMessages([message_id]);
     }), 2000);
+}));
+bot.command("edit", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
+    yield ctx.conversation.enter('edit');
 }));
 bot.command("sort", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     var sheet = WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1];
@@ -326,8 +378,18 @@ bot.command("cancel", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     yield ctx.conversation.exit("addtable");
     yield ctx.conversation.exit("datetable");
 }));
-bot.hears("Внести транзакцию", ctx => ctx.conversation.enter("addtable"));
-bot.hears("Внести транзакцию задним числом", ctx => ctx.conversation.enter("datetable"));
+bot.hears("Внести транзакцию", ctx => {
+    ctx.conversation.enter("addtable");
+    setInterval(() => {
+        ctx.deleteMessage();
+    }, 10000);
+});
+bot.hears("Внести транзакцию задним числом", ctx => {
+    ctx.conversation.enter("datetable");
+    setInterval(() => {
+        ctx.deleteMessage();
+    }, 10000);
+});
 bot.hears("Вывести еженедельную таблицу", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     yield ctx.reply(`Вот ваша ссылка на таблицу этой недели: <a href='${GetFileLinkFunction(WeekDoc, true)}'>Перейти</a>`, { parse_mode: 'HTML' });
 }));
