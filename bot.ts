@@ -10,8 +10,8 @@ import {
     createConversation,
 } from "@grammyjs/conversations";
 config()
-let ChatIds: string[] = [];
-let AddNotificationFor: string[] = ["woodd_i", "llicette", "goh222"]
+
+let Notification: string[] = ["goh222", "woodd_i"]
 let WeekDoc: GoogleSpreadsheet;
 let MainDoc: GoogleSpreadsheet;
 let maxseconds = { maxMilliseconds: 100000 }
@@ -44,14 +44,18 @@ const serviceAccountAuth = new JWT({
     ]
 });
 type NotType = "add_category" | "delete_category" | "add_score" | "delete_score" | "add_transaction"
-const NotificationSend = (NotifType: NotType) => {
-    ChatIds.forEach(async element => {
-        await bot.api.sendMessage(element,
-            NotifType == "add_category" ? "Добавлена новая категория!" :
-                NotifType == "add_score" ? "Добавлен новый счет!" :
-                    NotifType == "add_transaction" ? "Добавлена новая транзакция" :
-                        NotifType == "delete_category" ? "Удалена категория" :
-                            NotifType == "delete_score" ? "Удален счет!" : "")
+const NotificationSend = async (NotifType: NotType) => {
+    var data = await loadScoreKeyBoard()
+    data.user.forEach(async element => {
+        if (Notification.find((el) => el == element.username)) {
+            await bot.api.sendMessage(element.chat_id,
+                NotifType == "add_category" ? "Добавлена новая категория!" :
+                    NotifType == "add_score" ? "Добавлен новый счет!" :
+                        NotifType == "add_transaction" ? "Добавлена новая транзакция" :
+                            NotifType == "delete_category" ? "Удалена категория" :
+                                NotifType == "delete_score" ? "Удален счет!" : "")
+        }
+
     });
 }
 const GetFileLinkFunction = (Doc: GoogleSpreadsheet, SetSheetID?: boolean): string => {
@@ -70,6 +74,7 @@ const GetFileLinkFunction = (Doc: GoogleSpreadsheet, SetSheetID?: boolean): stri
     await WeekDoc.loadInfo()
 })();
 setInterval(async () => {
+
     let sheet = WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1];
     var NowDate = new Date();
     if (sheet.title.split("_").length != 2) {
@@ -82,7 +87,22 @@ setInterval(async () => {
     if (NowDate >= SheetCreatedDate) {
         WeekDoc.addSheet({ title: `sheet_${NowDate.toLocaleDateString(locates)}`, headerValues: HeaderValues })
     }
-}, 10000)
+    if (`${NowDate.getHours()}:${NowDate.getMinutes()}:${getFormatedSeconds(NowDate.getSeconds())}` == "21:0:10") {
+        var data = await loadScoreKeyBoard()
+        data.user.forEach(element => {
+            if (Notification.find((el) => el == element.username)) {
+                if (NowDate.getDay() == 7) {
+                    bot.api.sendMessage(element.chat_id, "<b>Уведомление о внесении в журнал операций!</b>", { parse_mode: 'HTML' });
+                }
+            }
+            bot.api.sendMessage(element.chat_id, "<b>Ежедневное упоминание о добавлении транзакции!</b>", { parse_mode: 'HTML' });
+        });
+    }
+}, 5000)
+function getFormatedSeconds(params: number) {
+    var num = params % 10
+    return num != 0 ? num <= 5 ? params += 5 - num : params += 10 - num : params <= 5 ? 5 : 10
+}
 const MainKeyboard = Keyboard.from(Commands.map((el) => [Keyboard.text(el)])).resized();
 const SettingsKeyboard = Keyboard.from(SubCommands.map((el) => [Keyboard.text(el)])).resized();
 const FinalKeyBoard = new InlineKeyboard().text("Отправить", "send").text("Выйти", "exit")
@@ -90,9 +110,9 @@ const SelectKeyboard = new InlineKeyboard().text("Да").text("Нет")
 
 type MyContext = Context & ConversationFlavor;
 type MyConversation = Conversation<MyContext>;
-type UserType ={ user_id: string,chat_id: string}
+type UserType = { username: string | undefined, chat_id: number }
 type JsonData = {
-    categories: string[], scores: string[],user: UserType[]
+    categories: string[], scores: string[], user: UserType[]
 }
 const bot = new Bot<MyContext>(process.env.BOT_TOKEN!);
 bot.api.setMyCommands([
@@ -254,74 +274,99 @@ async function on_edit(conversation: MyConversation, ctx: MyContext) {
     var sheet = WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1];
     const rows = (await sheet.getRows())
     var rowMessage = "Выберите транзакцию по айди из списка\n"
-    HeaderValues.map((el)=>{
+    rowMessage += `Id `
+    HeaderValues.map((el) => {
         rowMessage += `${el} `
     })
-    rowMessage+="\n"
-    rows.map((el,ind)=>{
-        rowMessage+=`<b>${el.get("Дата транзакции")} ${el.get("Счет")} ${el.get("Сумма")} ${el.get("Комментарий")} ${el.get("Категория")}</b>\n`
+    rowMessage += "\n"
+    rows.map((el, ind) => {
+        rowMessage += `<b>${ind} ${el.get("Дата транзакции")} ${el.get("Счет")} ${el.get("Сумма")} ${el.get("Комментарий")} ${el.get("Категория")}</b>\n`
     })
-    const mes1 = await ctx.reply(rowMessage,{parse_mode: 'HTML',reply_markup: InlineKeyboard.from(rows.map((_el,ind)=>[InlineKeyboard.text(ind.toString())]))});
-    var {callbackQuery} = await conversation.waitFor("callback_query:data",{ ...maxseconds });
+    const mes1 = await ctx.reply(rowMessage, { parse_mode: 'HTML' });
+    var row: GoogleSpreadsheetRow<Record<string, any>> = rows[await conversation.form.number()]
     ctx.deleteMessages([mes1.message_id])
-    var row :  GoogleSpreadsheetRow<Record<string, any>> = rows[Number(callbackQuery.data)] 
-    const mes2 = await ctx.reply("Вы хотите изменить \"Дату транзакции\"",{reply_markup: InlineKeyboard.from([[InlineKeyboard.text('Оставить без изменений')]])})
-    var data1 = await conversation.wait({ ...maxseconds });
-    let dateVal = data1.message?.text ? data1.message.text : row.get("Дата транзакции");
-    ctx.deleteMessages([mes2.message_id])
-    const mes3 = await ctx.reply("Вы хотите изменить \"Счет\"",{reply_markup: InlineKeyboard.from([[InlineKeyboard.text('Оставить без изменений')],...ReadedData.scores.map(el=>[InlineKeyboard.text(el)])])})
-    var data2 = await conversation.waitFor("callback_query:data",{ ...maxseconds });
-    let ScoreVal = data2.callbackQuery.data == "Оставить без изменений" ? row.get("Счет") : data2.callbackQuery.data;
-    ctx.deleteMessages([mes3.message_id]);
-    const mes4 = await ctx.reply("Вы хотите изменить \"Сумма\"",{reply_markup: InlineKeyboard.from([[InlineKeyboard.text('Оставить без изменений')]])})
-    var data1 = await conversation.wait({ ...maxseconds });
-    let sumVal = data1.message?.text ? data1.message.text : row.get("Сумма");
-    ctx.deleteMessages([mes4.message_id]);
-    const mes5 = await ctx.reply("Вы хотите изменить \"Комментарий\"",{reply_markup: InlineKeyboard.from([[InlineKeyboard.text('Оставить без изменений')]])})
-    var data1 = await conversation.wait({ ...maxseconds });
-    let commentVal = data1.message?.text ? data1.message.text : row.get("Комментарий");
-    ctx.deleteMessages([mes5.message_id]);
-    const mes6 = await ctx.reply("Вы хотите изменить \"Категория\"",{reply_markup: InlineKeyboard.from([[InlineKeyboard.text('Оставить без изменений')],...ReadedData.categories.map(el=>[InlineKeyboard.text(el)])])})
-    var data2 = await conversation.waitFor("callback_query:data",{ ...maxseconds });
-    let CategoryVal = data2.callbackQuery.data == "Оставить без изменений" ? row.get("Категория") : data2.callbackQuery.data;
-    ctx.deleteMessages([mes6.message_id]);
-    row.set("Дату транзакции",dateVal);
-    row.set("Счет",ScoreVal);
-    row.set("Сумма",sumVal);
-    row.set("Комментарий",commentVal)
-    row.set("Категория",CategoryVal);
-    await row.save();
-    await ctx.reply("Успешно сохранено.")
+    const loop = true
+    do {
+        var selectedQuerry: string;
+        const mes2 = await ctx.reply("Выберите что вы хотите изменить??", {
+            reply_markup: InlineKeyboard.from([
+                [InlineKeyboard.text('Дата транзакции')],
+                [InlineKeyboard.text('Счет')],
+                [InlineKeyboard.text('Сумма')],
+                [InlineKeyboard.text('Комментарий')],
+                [InlineKeyboard.text('Категория')],
+                [InlineKeyboard.text('Выйти из цикла редактирования')]
+            ])
+        })
+
+        const { callbackQuery } = await conversation.waitFor("callback_query:data", { ...maxseconds });
+        selectedQuerry = callbackQuery.data;
+        ctx.deleteMessages([mes2.message_id])
+        if (selectedQuerry == 'Выйти из цикла редактирования') {
+            return;
+        } else {
+            const mes3 = await ctx.reply(`Вы хотите изменить \"${selectedQuerry}\"`, {
+                reply_markup: selectedQuerry == "Счет" || selectedQuerry == "Категория" ? InlineKeyboard.from(
+                    selectedQuerry == "Счет" ? ReadedData.scores.map((el) => [InlineKeyboard.text(el)])
+                        : ReadedData.categories.map((el) => [InlineKeyboard.text(el)])
+                ) : undefined
+            })
+
+            var data = await conversation.wait({ ...maxseconds });
+
+            row.set(selectedQuerry, data.message?.text ?? data.callbackQuery?.data)
+            await row.save();
+            ctx.deleteMessages([mes3.message_id])
+
+        }
+    } while (loop)
 
 }
 bot.use(createConversation(addweaktable, "addtable"));
 bot.use(createConversation(addweakwithcustomdate, "datetable"))
 bot.use(createConversation(on_delete, "delete"));
 bot.use(createConversation(on_add, "add"));
-bot.use(createConversation(on_edit,'edit'))
+bot.use(createConversation(on_edit, 'edit'))
 bot.command("start", async (ctx) => {
-    const { message_id } = await ctx.reply("Приветствую тебя пользователь. Посмотри мое меню", {
+    const { message_id, chat: { id, username } } = await ctx.reply("Приветствую тебя пользователь. Посмотри мое меню", {
         reply_markup: MainKeyboard
     })
+    var data = await loadScoreKeyBoard()
+    var finded_data = data.user?.find((el) => el.username == username);
+    if (finded_data) {
+        finded_data.chat_id = id;
+    } else {
+        if (!data.user) data.user = []
+        data.user.push({ chat_id: id, username: username })
+    }
+    await write_file(data)
     setTimeout(async () => {
         await ctx.deleteMessages([message_id]);
     }, 2000)
 });
-bot.command("edit",async ctx=>{
+bot.command("edit", async ctx => {
     await ctx.conversation.enter('edit');
 })
 bot.command("sort", async ctx => {
     var sheet = WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1];
+    var main_sheet = MainDoc.sheetsByIndex[0];
     const rows = (await sheet.getRows())
+    const main_rows = (await main_sheet.getRows())
     const sortedRows = rows.sort((a, b) => {
         var dateA = new Date(a.get("Дата транзакции")).getTime();
         var dateB = new Date(b.get("Дата транзакции")).getTime();
         return dateA > dateB ? 1 : -1;
     });
+    const main_sortedRows = main_rows.sort((a, b) => {
+        var dateA = new Date(a.get("Дата транзакции")).getTime();
+        var dateB = new Date(b.get("Дата транзакции")).getTime();
+        return dateA > dateB ? 1 : -1;
+    });
     await sheet.clear();
+    await main_sheet.clear();
     await sheet.setHeaderRow(HeaderValues);
-
-    Promise.all(await sheet.addRows(sortedRows.map((el) => {
+    await main_sheet.setHeaderRow(HeaderValues);
+    Promise.all([await sheet.addRows(sortedRows.map((el) => {
         return {
             "Дата транзакции": el.get("Дата транзакции"),
             Счет: el.get("Счет"),
@@ -329,7 +374,15 @@ bot.command("sort", async ctx => {
             Комментарий: el.get("Комментарий"),
             Категория: el.get("Категория")
         }
-    })))
+    })), await main_sheet.addRows(main_sortedRows.map((el) => {
+        return {
+            "Дата транзакции": el.get("Дата транзакции"),
+            Счет: el.get("Счет"),
+            Сумма: el.get("Сумма"),
+            Комментарий: el.get("Комментарий"),
+            Категория: el.get("Категория")
+        }
+    }))])
     const { message_id } = await ctx.reply("Успешная сортировка")
     setTimeout(async () => {
         await ctx.deleteMessages([message_id]);
@@ -348,20 +401,20 @@ bot.hears("Добавить категорию или счет", async ctx => {
 bot.command("table", async ctx => {
     await ctx.reply(`Вот ваша ссылка на таблицу всех транзакций: <a href='https://docs.google.com/spreadsheets/d/${process.env.MAIN_DOC}/edit'>Перейти</a>`, { parse_mode: 'HTML' })
 })
-bot.command("update_notifications", async ctx => {
-    if (AddNotificationFor.indexOf(ctx.chat.username!) > -1) {
-        if (ChatIds.indexOf(ctx.chat.id.toString()) == -1) {
-            ChatIds.push(ctx.chat.id.toString());
-            await ctx.reply("Вы обновили систему уведомлений, пока сессия бота активна.");
-        } else {
-            await ctx.reply("Вы уже добавлены в систему уведомлений, пока сессия бота активна.");
-        }
+// bot.command("update_notifications", async ctx => {
+//     if (AddNotificationFor.indexOf(ctx.chat.username!) > -1) {
+//         if (ChatIds.indexOf(ctx.chat.id.toString()) == -1) {
+//             ChatIds.push(ctx.chat.id.toString());
+//             await ctx.reply("Вы обновили систему уведомлений, пока сессия бота активна.");
+//         } else {
+//             await ctx.reply("Вы уже добавлены в систему уведомлений, пока сессия бота активна.");
+//         }
 
-    } else {
-        await ctx.reply("У вас нет прав на использование этой команды.");
-    }
+//     } else {
+//         await ctx.reply("У вас нет прав на использование этой команды.");
+//     }
 
-})
+// })
 bot.command("cancel", async ctx => {
     await ctx.conversation.exit("addtable")
     await ctx.conversation.exit("datetable");

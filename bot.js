@@ -16,8 +16,7 @@ const google_auth_library_1 = require("google-auth-library");
 const promises_1 = require("fs/promises");
 const conversations_1 = require("@grammyjs/conversations");
 (0, dotenv_1.config)();
-let ChatIds = [];
-let AddNotificationFor = ["woodd_i", "llicette", "goh222"];
+let Notification = ["goh222", "woodd_i"];
 let WeekDoc;
 let MainDoc;
 let maxseconds = { maxMilliseconds: 100000 };
@@ -48,15 +47,18 @@ const serviceAccountAuth = new google_auth_library_1.JWT({
         'https://www.googleapis.com/auth/drive.file',
     ]
 });
-const NotificationSend = (NotifType) => {
-    ChatIds.forEach((element) => __awaiter(void 0, void 0, void 0, function* () {
-        yield bot.api.sendMessage(element, NotifType == "add_category" ? "Добавлена новая категория!" :
-            NotifType == "add_score" ? "Добавлен новый счет!" :
-                NotifType == "add_transaction" ? "Добавлена новая транзакция" :
-                    NotifType == "delete_category" ? "Удалена категория" :
-                        NotifType == "delete_score" ? "Удален счет!" : "");
+const NotificationSend = (NotifType) => __awaiter(void 0, void 0, void 0, function* () {
+    var data = yield loadScoreKeyBoard();
+    data.user.forEach((element) => __awaiter(void 0, void 0, void 0, function* () {
+        if (Notification.find((el) => el == element.username)) {
+            yield bot.api.sendMessage(element.chat_id, NotifType == "add_category" ? "Добавлена новая категория!" :
+                NotifType == "add_score" ? "Добавлен новый счет!" :
+                    NotifType == "add_transaction" ? "Добавлена новая транзакция" :
+                        NotifType == "delete_category" ? "Удалена категория" :
+                            NotifType == "delete_score" ? "Удален счет!" : "");
+        }
     }));
-};
+});
 const GetFileLinkFunction = (Doc, SetSheetID) => {
     var sheetId;
     if (SetSheetID)
@@ -87,7 +89,22 @@ setInterval(() => __awaiter(void 0, void 0, void 0, function* () {
     if (NowDate >= SheetCreatedDate) {
         WeekDoc.addSheet({ title: `sheet_${NowDate.toLocaleDateString(locates)}`, headerValues: HeaderValues });
     }
-}), 10000);
+    if (`${NowDate.getHours()}:${NowDate.getMinutes()}:${getFormatedSeconds(NowDate.getSeconds())}` == "21:0:10") {
+        var data = yield loadScoreKeyBoard();
+        data.user.forEach(element => {
+            if (Notification.find((el) => el == element.username)) {
+                if (NowDate.getDay() == 7) {
+                    bot.api.sendMessage(element.chat_id, "<b>Уведомление о внесении в журнал операций!</b>", { parse_mode: 'HTML' });
+                }
+            }
+            bot.api.sendMessage(element.chat_id, "<b>Ежедневное упоминание о добавлении транзакции!</b>", { parse_mode: 'HTML' });
+        });
+    }
+}), 5000);
+function getFormatedSeconds(params) {
+    var num = params % 10;
+    return num != 0 ? num <= 5 ? params += 5 - num : params += 10 - num : params <= 5 ? 5 : 10;
+}
 const MainKeyboard = grammy_1.Keyboard.from(Commands.map((el) => [grammy_1.Keyboard.text(el)])).resized();
 const SettingsKeyboard = grammy_1.Keyboard.from(SubCommands.map((el) => [grammy_1.Keyboard.text(el)])).resized();
 const FinalKeyBoard = new grammy_1.InlineKeyboard().text("Отправить", "send").text("Выйти", "exit");
@@ -265,44 +282,47 @@ function on_edit(conversation, ctx) {
         var sheet = WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1];
         const rows = (yield sheet.getRows());
         var rowMessage = "Выберите транзакцию по айди из списка\n";
+        rowMessage += `Id `;
         HeaderValues.map((el) => {
             rowMessage += `${el} `;
         });
         rowMessage += "\n";
         rows.map((el, ind) => {
-            rowMessage += `<b>${el.get("Дата транзакции")} ${el.get("Счет")} ${el.get("Сумма")} ${el.get("Комментарий")} ${el.get("Категория")}</b>\n`;
+            rowMessage += `<b>${ind} ${el.get("Дата транзакции")} ${el.get("Счет")} ${el.get("Сумма")} ${el.get("Комментарий")} ${el.get("Категория")}</b>\n`;
         });
-        const mes1 = yield ctx.reply(rowMessage, { parse_mode: 'HTML', reply_markup: grammy_1.InlineKeyboard.from(rows.map((_el, ind) => [grammy_1.InlineKeyboard.text(ind.toString())])) });
-        var { callbackQuery } = yield conversation.waitFor("callback_query:data", Object.assign({}, maxseconds));
+        const mes1 = yield ctx.reply(rowMessage, { parse_mode: 'HTML' });
+        var row = rows[yield conversation.form.number()];
         ctx.deleteMessages([mes1.message_id]);
-        var row = rows[Number(callbackQuery.data)];
-        const mes2 = yield ctx.reply("Вы хотите изменить \"Дату транзакции\"", { reply_markup: grammy_1.InlineKeyboard.from([[grammy_1.InlineKeyboard.text('Оставить без изменений')]]) });
-        var data1 = yield conversation.wait(Object.assign({}, maxseconds));
-        let dateVal = ((_a = data1.message) === null || _a === void 0 ? void 0 : _a.text) ? data1.message.text : row.get("Дата транзакции");
-        ctx.deleteMessages([mes2.message_id]);
-        const mes3 = yield ctx.reply("Вы хотите изменить \"Счет\"", { reply_markup: grammy_1.InlineKeyboard.from([[grammy_1.InlineKeyboard.text('Оставить без изменений')], ...ReadedData.scores.map(el => [grammy_1.InlineKeyboard.text(el)])]) });
-        var data2 = yield conversation.waitFor("callback_query:data", Object.assign({}, maxseconds));
-        let ScoreVal = data2.callbackQuery.data == "Оставить без изменений" ? row.get("Счет") : data2.callbackQuery.data;
-        ctx.deleteMessages([mes3.message_id]);
-        const mes4 = yield ctx.reply("Вы хотите изменить \"Сумма\"", { reply_markup: grammy_1.InlineKeyboard.from([[grammy_1.InlineKeyboard.text('Оставить без изменений')]]) });
-        var data1 = yield conversation.wait(Object.assign({}, maxseconds));
-        let sumVal = ((_b = data1.message) === null || _b === void 0 ? void 0 : _b.text) ? data1.message.text : row.get("Сумма");
-        ctx.deleteMessages([mes4.message_id]);
-        const mes5 = yield ctx.reply("Вы хотите изменить \"Комментарий\"", { reply_markup: grammy_1.InlineKeyboard.from([[grammy_1.InlineKeyboard.text('Оставить без изменений')]]) });
-        var data1 = yield conversation.wait(Object.assign({}, maxseconds));
-        let commentVal = ((_c = data1.message) === null || _c === void 0 ? void 0 : _c.text) ? data1.message.text : row.get("Комментарий");
-        ctx.deleteMessages([mes5.message_id]);
-        const mes6 = yield ctx.reply("Вы хотите изменить \"Категория\"", { reply_markup: grammy_1.InlineKeyboard.from([[grammy_1.InlineKeyboard.text('Оставить без изменений')], ...ReadedData.categories.map(el => [grammy_1.InlineKeyboard.text(el)])]) });
-        var data2 = yield conversation.waitFor("callback_query:data", Object.assign({}, maxseconds));
-        let CategoryVal = data2.callbackQuery.data == "Оставить без изменений" ? row.get("Категория") : data2.callbackQuery.data;
-        ctx.deleteMessages([mes6.message_id]);
-        row.set("Дату транзакции", dateVal);
-        row.set("Счет", ScoreVal);
-        row.set("Сумма", sumVal);
-        row.set("Комментарий", commentVal);
-        row.set("Категория", CategoryVal);
-        yield row.save();
-        yield ctx.reply("Успешно сохранено.");
+        const loop = true;
+        do {
+            var selectedQuerry;
+            const mes2 = yield ctx.reply("Выберите что вы хотите изменить??", {
+                reply_markup: grammy_1.InlineKeyboard.from([
+                    [grammy_1.InlineKeyboard.text('Дата транзакции')],
+                    [grammy_1.InlineKeyboard.text('Счет')],
+                    [grammy_1.InlineKeyboard.text('Сумма')],
+                    [grammy_1.InlineKeyboard.text('Комментарий')],
+                    [grammy_1.InlineKeyboard.text('Категория')],
+                    [grammy_1.InlineKeyboard.text('Выйти из цикла редактирования')]
+                ])
+            });
+            const { callbackQuery } = yield conversation.waitFor("callback_query:data", Object.assign({}, maxseconds));
+            selectedQuerry = callbackQuery.data;
+            ctx.deleteMessages([mes2.message_id]);
+            if (selectedQuerry == 'Выйти из цикла редактирования') {
+                return;
+            }
+            else {
+                const mes3 = yield ctx.reply(`Вы хотите изменить \"${selectedQuerry}\"`, {
+                    reply_markup: selectedQuerry == "Счет" || selectedQuerry == "Категория" ? grammy_1.InlineKeyboard.from(selectedQuerry == "Счет" ? ReadedData.scores.map((el) => [grammy_1.InlineKeyboard.text(el)])
+                        : ReadedData.categories.map((el) => [grammy_1.InlineKeyboard.text(el)])) : undefined
+                });
+                var data = yield conversation.wait(Object.assign({}, maxseconds));
+                row.set(selectedQuerry, (_b = (_a = data.message) === null || _a === void 0 ? void 0 : _a.text) !== null && _b !== void 0 ? _b : (_c = data.callbackQuery) === null || _c === void 0 ? void 0 : _c.data);
+                yield row.save();
+                ctx.deleteMessages([mes3.message_id]);
+            }
+        } while (loop);
     });
 }
 bot.use((0, conversations_1.createConversation)(addweaktable, "addtable"));
@@ -311,9 +331,21 @@ bot.use((0, conversations_1.createConversation)(on_delete, "delete"));
 bot.use((0, conversations_1.createConversation)(on_add, "add"));
 bot.use((0, conversations_1.createConversation)(on_edit, 'edit'));
 bot.command("start", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
-    const { message_id } = yield ctx.reply("Приветствую тебя пользователь. Посмотри мое меню", {
+    var _a;
+    const { message_id, chat: { id, username } } = yield ctx.reply("Приветствую тебя пользователь. Посмотри мое меню", {
         reply_markup: MainKeyboard
     });
+    var data = yield loadScoreKeyBoard();
+    var finded_data = (_a = data.user) === null || _a === void 0 ? void 0 : _a.find((el) => el.username == username);
+    if (finded_data) {
+        finded_data.chat_id = id;
+    }
+    else {
+        if (!data.user)
+            data.user = [];
+        data.user.push({ chat_id: id, username: username });
+    }
+    yield write_file(data);
     setTimeout(() => __awaiter(void 0, void 0, void 0, function* () {
         yield ctx.deleteMessages([message_id]);
     }), 2000);
@@ -323,23 +355,40 @@ bot.command("edit", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
 }));
 bot.command("sort", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     var sheet = WeekDoc.sheetsByIndex[WeekDoc.sheetCount - 1];
+    var main_sheet = MainDoc.sheetsByIndex[0];
     const rows = (yield sheet.getRows());
+    const main_rows = (yield main_sheet.getRows());
     const sortedRows = rows.sort((a, b) => {
         var dateA = new Date(a.get("Дата транзакции")).getTime();
         var dateB = new Date(b.get("Дата транзакции")).getTime();
         return dateA > dateB ? 1 : -1;
     });
+    const main_sortedRows = main_rows.sort((a, b) => {
+        var dateA = new Date(a.get("Дата транзакции")).getTime();
+        var dateB = new Date(b.get("Дата транзакции")).getTime();
+        return dateA > dateB ? 1 : -1;
+    });
     yield sheet.clear();
+    yield main_sheet.clear();
     yield sheet.setHeaderRow(HeaderValues);
-    Promise.all(yield sheet.addRows(sortedRows.map((el) => {
-        return {
-            "Дата транзакции": el.get("Дата транзакции"),
-            Счет: el.get("Счет"),
-            Сумма: el.get("Сумма"),
-            Комментарий: el.get("Комментарий"),
-            Категория: el.get("Категория")
-        };
-    })));
+    yield main_sheet.setHeaderRow(HeaderValues);
+    Promise.all([yield sheet.addRows(sortedRows.map((el) => {
+            return {
+                "Дата транзакции": el.get("Дата транзакции"),
+                Счет: el.get("Счет"),
+                Сумма: el.get("Сумма"),
+                Комментарий: el.get("Комментарий"),
+                Категория: el.get("Категория")
+            };
+        })), yield main_sheet.addRows(main_sortedRows.map((el) => {
+            return {
+                "Дата транзакции": el.get("Дата транзакции"),
+                Счет: el.get("Счет"),
+                Сумма: el.get("Сумма"),
+                Комментарий: el.get("Комментарий"),
+                Категория: el.get("Категория")
+            };
+        }))]);
     const { message_id } = yield ctx.reply("Успешная сортировка");
     setTimeout(() => __awaiter(void 0, void 0, void 0, function* () {
         yield ctx.deleteMessages([message_id]);
@@ -360,20 +409,18 @@ bot.hears("Добавить категорию или счет", (ctx) => __awai
 bot.command("table", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     yield ctx.reply(`Вот ваша ссылка на таблицу всех транзакций: <a href='https://docs.google.com/spreadsheets/d/${process.env.MAIN_DOC}/edit'>Перейти</a>`, { parse_mode: 'HTML' });
 }));
-bot.command("update_notifications", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
-    if (AddNotificationFor.indexOf(ctx.chat.username) > -1) {
-        if (ChatIds.indexOf(ctx.chat.id.toString()) == -1) {
-            ChatIds.push(ctx.chat.id.toString());
-            yield ctx.reply("Вы обновили систему уведомлений, пока сессия бота активна.");
-        }
-        else {
-            yield ctx.reply("Вы уже добавлены в систему уведомлений, пока сессия бота активна.");
-        }
-    }
-    else {
-        yield ctx.reply("У вас нет прав на использование этой команды.");
-    }
-}));
+// bot.command("update_notifications", async ctx => {
+//     if (AddNotificationFor.indexOf(ctx.chat.username!) > -1) {
+//         if (ChatIds.indexOf(ctx.chat.id.toString()) == -1) {
+//             ChatIds.push(ctx.chat.id.toString());
+//             await ctx.reply("Вы обновили систему уведомлений, пока сессия бота активна.");
+//         } else {
+//             await ctx.reply("Вы уже добавлены в систему уведомлений, пока сессия бота активна.");
+//         }
+//     } else {
+//         await ctx.reply("У вас нет прав на использование этой команды.");
+//     }
+// })
 bot.command("cancel", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     yield ctx.conversation.exit("addtable");
     yield ctx.conversation.exit("datetable");
