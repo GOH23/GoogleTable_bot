@@ -425,22 +425,32 @@ bot.command("cancel", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     yield ctx.conversation.exit("addtable");
     yield ctx.conversation.exit("datetable");
 }));
-bot.hears("Внести транзакцию", ctx => {
-    ctx.conversation.enter("addtable");
+bot.hears("Внести транзакцию", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
+    yield ctx.conversation.enter("addtable");
     setInterval(() => {
         ctx.deleteMessage();
     }, 10000);
-});
-bot.hears("Внести транзакцию задним числом", ctx => {
-    ctx.conversation.enter("datetable");
+}));
+bot.hears("Внести транзакцию задним числом", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
+    yield ctx.conversation.enter("datetable");
     setInterval(() => {
         ctx.deleteMessage();
     }, 10000);
-});
+}));
 bot.hears("Вывести еженедельную таблицу", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     yield ctx.reply(`Вот ваша ссылка на таблицу этой недели: <a href='${GetFileLinkFunction(WeekDoc, true)}'>Перейти</a>`, { parse_mode: 'HTML' });
 }));
-bot.catch((er) => __awaiter(void 0, void 0, void 0, function* () {
-    er.ctx.reply(er.message);
-}));
+bot.catch((err) => {
+    const ctx = err.ctx;
+    ctx.reply(`Error while handling update ${ctx.update.update_id}:`);
+    const e = err.error;
+    if (e instanceof grammy_1.GrammyError) {
+        ctx.reply('Ошибка: ' + e.description);
+    }
+    else if (e instanceof grammy_1.HttpError) {
+        ctx.reply('Ошибка: ' + e.message);
+    }
+    else {
+    }
+});
 bot.start();

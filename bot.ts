@@ -1,4 +1,4 @@
-import { Bot, Context, InlineKeyboard, Keyboard, session } from "grammy";
+import { Bot, Context, GrammyError, HttpError, InlineKeyboard, Keyboard, session } from "grammy";
 import { config } from "dotenv";
 import { GoogleSpreadsheet, GoogleSpreadsheetRow } from 'google-spreadsheet';
 import { JWT } from "google-auth-library"
@@ -419,14 +419,14 @@ bot.command("cancel", async ctx => {
     await ctx.conversation.exit("addtable")
     await ctx.conversation.exit("datetable");
 })
-bot.hears("Внести транзакцию", ctx => {
-    ctx.conversation.enter("addtable")
+bot.hears("Внести транзакцию", async ctx => {
+    await ctx.conversation.enter("addtable")
     setInterval(() => {
         ctx.deleteMessage()
     }, 10000)
 })
-bot.hears("Внести транзакцию задним числом", ctx => {
-    ctx.conversation.enter("datetable")
+bot.hears("Внести транзакцию задним числом", async ctx => {
+    await ctx.conversation.enter("datetable")
     setInterval(() => {
         ctx.deleteMessage()
     }, 10000)
@@ -435,7 +435,15 @@ bot.hears("Внести транзакцию задним числом", ctx => 
 bot.hears("Вывести еженедельную таблицу", async ctx => {
     await ctx.reply(`Вот ваша ссылка на таблицу этой недели: <a href='${GetFileLinkFunction(WeekDoc, true)}'>Перейти</a>`, { parse_mode: 'HTML' })
 })
-bot.catch(async (er) => {
-    er.ctx.reply(er.message);
-})
+bot.catch((err) => {
+    const ctx = err.ctx;
+    ctx.reply(`Error while handling update ${ctx.update.update_id}:`); const e = err.error;
+    if (e instanceof GrammyError) {
+        ctx.reply('Ошибка: '+e.description);
+    } else if (e instanceof HttpError) {
+        ctx.reply('Ошибка: '+e.message);
+    } else {
+        
+    }
+});
 bot.start();
