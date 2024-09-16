@@ -59,6 +59,18 @@ const NotificationSend = (NotifType) => __awaiter(void 0, void 0, void 0, functi
         }
     }));
 });
+function isDateValid(dateStr) {
+    try {
+        var dateSplit = dateStr.trim().split(".");
+        if (dateSplit.length != 3) {
+            return false;
+        }
+        return !isNaN(Date.parse(`${dateSplit[2]}.${dateSplit[1]}.${dateSplit[0]}`));
+    }
+    catch (_a) {
+        return false;
+    }
+}
 const GetFileLinkFunction = (Doc, SetSheetID) => {
     var sheetId;
     if (SetSheetID)
@@ -235,15 +247,21 @@ function addweakwithcustomdate(conversation, ctx) {
         var _a, _b, _c;
         var ReadedData = yield loadScoreKeyBoard();
         const mes1 = yield ctx.reply("Выберите счет", { reply_markup: grammy_1.InlineKeyboard.from(ReadedData.scores.map((el) => [grammy_1.InlineKeyboard.text(el)])) });
-        const scoreQuerry = yield conversation.waitFor("callback_query:data", Object.assign({}, maxseconds));
-        const datemsg = yield ctx.reply("Напишите дату");
-        var dateAnswerMessage = yield conversation.wait(Object.assign({}, maxseconds));
-        const date = (_a = dateAnswerMessage.message) === null || _a === void 0 ? void 0 : _a.text;
-        const mes2 = yield ctx.reply("Напишите сумму");
-        var sumAnswerMessage = yield conversation.wait(Object.assign({}, maxseconds));
+        const scoreQuerry = yield conversation.waitFor("callback_query:data");
+        do {
+            var datemsg = yield ctx.reply("Напишите дату");
+            var dateAnswerMessage = yield conversation.wait();
+            var date = (_a = dateAnswerMessage.message) === null || _a === void 0 ? void 0 : _a.text;
+            console.log(isDateValid(date));
+            if (!isDateValid(date)) {
+                ctx.deleteMessages([dateAnswerMessage.msgId, datemsg.message_id]);
+            }
+        } while (!isDateValid(date));
+        var mes2 = yield ctx.reply("Напишите сумму");
+        var sumAnswerMessage = yield conversation.wait();
         const sum = (_b = sumAnswerMessage.message) === null || _b === void 0 ? void 0 : _b.text;
         const mes3 = yield ctx.reply("Напишите ваш комментарий");
-        var commentAnswerMessage = yield conversation.wait(Object.assign({}, maxseconds));
+        var commentAnswerMessage = yield conversation.wait();
         const comment = (_c = commentAnswerMessage.message) === null || _c === void 0 ? void 0 : _c.text;
         const mes4 = yield ctx.reply("Выберите категорию", { reply_markup: grammy_1.InlineKeyboard.from(ReadedData.categories.map((el) => [grammy_1.InlineKeyboard.text(el)])) });
         const categoryQuerry = yield conversation.waitFor("callback_query:data");
@@ -270,6 +288,7 @@ function addweakwithcustomdate(conversation, ctx) {
                 yield ctx.reply(getMessage({ score: scoreQuerry.callbackQuery.data, sum: sum, comment: comment, category: categoryQuerry.callbackQuery.data, date: date }, { ctx }), { parse_mode: 'HTML' });
                 break;
             default:
+                yield ctx.deleteMessages([mes1.message_id, mes2.message_id, mes3.message_id, mes4.message_id, mes5.message_id, datemsg.message_id, sumAnswerMessage.msgId, commentAnswerMessage.msgId, dateAnswerMessage.msgId]);
                 yield ctx.reply("Вы вышли из создания транзакции.");
                 return;
         }
@@ -359,14 +378,33 @@ bot.command("sort", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     const rows = (yield sheet.getRows());
     const main_rows = (yield main_sheet.getRows());
     const sortedRows = rows.sort((a, b) => {
-        var dateA = new Date(a.get("Дата транзакции")).getTime();
-        var dateB = new Date(b.get("Дата транзакции")).getTime();
-        return dateA > dateB ? 1 : -1;
+        var elemA = a.get("Дата транзакции");
+        var elemB = b.get("Дата транзакции");
+        var dateSplitA = elemA.trim().split(".");
+        var dateSplitB = elemB.trim().split(".");
+        var dateA = new Date(`${dateSplitA[2]}.${dateSplitA[1]}.${dateSplitA[0]}`).getTime();
+        var dateB = new Date(`${dateSplitB[2]}.${dateSplitB[1]}.${dateSplitB[0]}`).getTime();
+        return dateA - dateB;
     });
+    // const sortedRows = rows.sort((a, b) => {
+    //     var dateA = new Date(a.get("Дата транзакции")).getTime();
+    //     var dateB = new Date(b.get("Дата транзакции")).getTime();
+    //     return dateA - dateB
+    // });
+    // const main_sortedRows = _.sortBy(main_rows, (element) => {
+    //     var elem: string = element.get("Дата транзакции")
+    //     var dateSplit = elem.trim().split(".")
+    //     var SheetCreatedDate = new Date(`${dateSplit[2]}.${dateSplit[1]}.${dateSplit[0]}`)
+    //     return SheetCreatedDate
+    // })
     const main_sortedRows = main_rows.sort((a, b) => {
-        var dateA = new Date(a.get("Дата транзакции")).getTime();
-        var dateB = new Date(b.get("Дата транзакции")).getTime();
-        return dateA > dateB ? 1 : -1;
+        var elemA = a.get("Дата транзакции");
+        var elemB = b.get("Дата транзакции");
+        var dateSplitA = elemA.trim().split(".");
+        var dateSplitB = elemB.trim().split(".");
+        var dateA = new Date(`${dateSplitA[2]}.${dateSplitA[1]}.${dateSplitA[0]}`).getTime();
+        var dateB = new Date(`${dateSplitB[2]}.${dateSplitB[1]}.${dateSplitB[0]}`).getTime();
+        return dateA - dateB;
     });
     yield sheet.clear();
     yield main_sheet.clear();
@@ -427,15 +465,11 @@ bot.command("cancel", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
 }));
 bot.hears("Внести транзакцию", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     yield ctx.conversation.enter("addtable");
-    setInterval(() => {
-        ctx.deleteMessage();
-    }, 10000);
+    yield ctx.deleteMessage();
 }));
 bot.hears("Внести транзакцию задним числом", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     yield ctx.conversation.enter("datetable");
-    setInterval(() => {
-        ctx.deleteMessage();
-    }, 10000);
+    yield ctx.deleteMessage();
 }));
 bot.hears("Вывести еженедельную таблицу", (ctx) => __awaiter(void 0, void 0, void 0, function* () {
     yield ctx.reply(`Вот ваша ссылка на таблицу этой недели: <a href='${GetFileLinkFunction(WeekDoc, true)}'>Перейти</a>`, { parse_mode: 'HTML' });

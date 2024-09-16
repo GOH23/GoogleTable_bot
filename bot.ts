@@ -2,6 +2,7 @@ import { Bot, Context, GrammyError, HttpError, InlineKeyboard, Keyboard, session
 import { config } from "dotenv";
 import { GoogleSpreadsheet, GoogleSpreadsheetRow } from 'google-spreadsheet';
 import { JWT } from "google-auth-library"
+import _ from 'lodash'
 import { readFile, writeFile } from 'fs/promises'
 import {
     type Conversation,
@@ -58,6 +59,17 @@ const NotificationSend = async (NotifType: NotType) => {
 
     });
 }
+function isDateValid(dateStr: string) {
+    try {
+        var dateSplit = dateStr.trim().split(".")
+        if (dateSplit.length != 3) {
+            return false;
+        }
+        return !isNaN(Date.parse(`${dateSplit[2]}.${dateSplit[1]}.${dateSplit[0]}`));
+    } catch {
+        return false;
+    }
+}
 const GetFileLinkFunction = (Doc: GoogleSpreadsheet, SetSheetID?: boolean): string => {
     var sheetId: number | undefined;
     if (SetSheetID) sheetId = Doc.sheetsByIndex[WeekDoc.sheetCount - 1].sheetId
@@ -87,7 +99,7 @@ setInterval(async () => {
     if (NowDate >= SheetCreatedDate) {
         WeekDoc.addSheet({ title: `sheet_${NowDate.toLocaleDateString(locates)}`, headerValues: HeaderValues })
     }
-    if (`${NowDate.getHours()}:${NowDate.getMinutes()}:${getFormatedSeconds(NowDate.getSeconds())}` == "21:0:10") {
+    if (`${NowDate.getHours()}:${NowDate.getMinutes()}:${getFormatedSeconds(NowDate.getSeconds())}` == "21:0:15") {
         var data = await loadScoreKeyBoard()
         data.user.forEach(element => {
             if (Notification.find((el) => el == element.username)) {
@@ -225,15 +237,18 @@ async function on_add(conversation: MyConversation, ctx: MyContext) {
 async function addweakwithcustomdate(conversation: MyConversation, ctx: MyContext) {
     var ReadedData = await loadScoreKeyBoard();
     const mes1 = await ctx.reply("Выберите счет", { reply_markup: InlineKeyboard.from(ReadedData.scores.map((el) => [InlineKeyboard.text(el)])) });
-    const scoreQuerry = await conversation.waitFor("callback_query:data", { ...maxseconds });
-    const datemsg = await ctx.reply("Напишите дату")
-    var dateAnswerMessage = await conversation.wait({ ...maxseconds });
-    const date: string = dateAnswerMessage.message?.text!;
-    const mes2 = await ctx.reply("Напишите сумму")
-    var sumAnswerMessage = await conversation.wait({ ...maxseconds });
+    const scoreQuerry = await conversation.waitFor("callback_query:data");
+    do {
+        var datemsg = await ctx.reply("Напишите дату")
+        var dateAnswerMessage = await conversation.wait();
+        var date: string = dateAnswerMessage.message?.text!;
+        if (!isDateValid(date)) { ctx.deleteMessages([dateAnswerMessage.msgId!, datemsg.message_id]) }
+    } while (!isDateValid(date))
+    var mes2 = await ctx.reply("Напишите сумму")
+    var sumAnswerMessage = await conversation.wait();
     const sum: string = sumAnswerMessage.message?.text!;
     const mes3 = await ctx.reply("Напишите ваш комментарий")
-    var commentAnswerMessage = await conversation.wait({ ...maxseconds });
+    var commentAnswerMessage = await conversation.wait();
     const comment: string = commentAnswerMessage.message?.text!;
     const mes4 = await ctx.reply("Выберите категорию", { reply_markup: InlineKeyboard.from(ReadedData.categories.map((el) => [InlineKeyboard.text(el)])) });
     const categoryQuerry = await conversation.waitFor("callback_query:data");
@@ -259,11 +274,13 @@ async function addweakwithcustomdate(conversation: MyConversation, ctx: MyContex
             })])
 
 
+
             await ctx.deleteMessages([mes1.message_id, mes2.message_id, mes3.message_id, mes4.message_id, mes5.message_id, datemsg.message_id, sumAnswerMessage.msgId!, commentAnswerMessage.msgId!, dateAnswerMessage.msgId!]);
             NotificationSend("add_transaction");
             await ctx.reply(getMessage({ score: scoreQuerry.callbackQuery.data, sum: sum, comment: comment, category: categoryQuerry.callbackQuery.data, date: date }, { ctx }), { parse_mode: 'HTML' })
             break;
         default:
+            await ctx.deleteMessages([mes1.message_id, mes2.message_id, mes3.message_id, mes4.message_id, mes5.message_id, datemsg.message_id, sumAnswerMessage.msgId!, commentAnswerMessage.msgId!, dateAnswerMessage.msgId!]);
             await ctx.reply("Вы вышли из создания транзакции.")
             return;
     }
@@ -353,14 +370,33 @@ bot.command("sort", async ctx => {
     const rows = (await sheet.getRows())
     const main_rows = (await main_sheet.getRows())
     const sortedRows = rows.sort((a, b) => {
-        var dateA = new Date(a.get("Дата транзакции")).getTime();
-        var dateB = new Date(b.get("Дата транзакции")).getTime();
-        return dateA > dateB ? 1 : -1;
+        var elemA: string = a.get("Дата транзакции")
+        var elemB: string = b.get("Дата транзакции")
+        var dateSplitA = elemA.trim().split(".")
+        var dateSplitB = elemB.trim().split(".")
+        var dateA = new Date(`${dateSplitA[2]}.${dateSplitA[1]}.${dateSplitA[0]}`).getTime()
+        var dateB = new Date(`${dateSplitB[2]}.${dateSplitB[1]}.${dateSplitB[0]}`).getTime();
+        return dateA - dateB;
     });
+    // const sortedRows = rows.sort((a, b) => {
+    //     var dateA = new Date(a.get("Дата транзакции")).getTime();
+    //     var dateB = new Date(b.get("Дата транзакции")).getTime();
+    //     return dateA - dateB
+    // });
+    // const main_sortedRows = _.sortBy(main_rows, (element) => {
+    //     var elem: string = element.get("Дата транзакции")
+    //     var dateSplit = elem.trim().split(".")
+    //     var SheetCreatedDate = new Date(`${dateSplit[2]}.${dateSplit[1]}.${dateSplit[0]}`)
+    //     return SheetCreatedDate
+    // })
     const main_sortedRows = main_rows.sort((a, b) => {
-        var dateA = new Date(a.get("Дата транзакции")).getTime();
-        var dateB = new Date(b.get("Дата транзакции")).getTime();
-        return dateA > dateB ? 1 : -1;
+        var elemA: string = a.get("Дата транзакции")
+        var elemB: string = b.get("Дата транзакции")
+        var dateSplitA = elemA.trim().split(".")
+        var dateSplitB = elemB.trim().split(".")
+        var dateA = new Date(`${dateSplitA[2]}.${dateSplitA[1]}.${dateSplitA[0]}`).getTime()
+        var dateB = new Date(`${dateSplitB[2]}.${dateSplitB[1]}.${dateSplitB[0]}`).getTime();
+        return dateA - dateB;
     });
     await sheet.clear();
     await main_sheet.clear();
@@ -421,16 +457,12 @@ bot.command("cancel", async ctx => {
 })
 bot.hears("Внести транзакцию", async ctx => {
     await ctx.conversation.enter("addtable")
-    setInterval(() => {
-        ctx.deleteMessage()
-    }, 10000)
+    await ctx.deleteMessage()
 })
 bot.hears("Внести транзакцию задним числом", async ctx => {
-    await ctx.conversation.enter("datetable")
-    setInterval(() => {
-        ctx.deleteMessage()
-    }, 10000)
 
+    await ctx.conversation.enter("datetable")
+    await ctx.deleteMessage()
 })
 bot.hears("Вывести еженедельную таблицу", async ctx => {
     await ctx.reply(`Вот ваша ссылка на таблицу этой недели: <a href='${GetFileLinkFunction(WeekDoc, true)}'>Перейти</a>`, { parse_mode: 'HTML' })
@@ -439,11 +471,11 @@ bot.catch((err) => {
     const ctx = err.ctx;
     ctx.reply(`Error while handling update ${ctx.update.update_id}:`); const e = err.error;
     if (e instanceof GrammyError) {
-        ctx.reply('Ошибка: '+e.description);
+        ctx.reply('Ошибка: ' + e.description);
     } else if (e instanceof HttpError) {
-        ctx.reply('Ошибка: '+e.message);
+        ctx.reply('Ошибка: ' + e.message);
     } else {
-        
+
     }
 });
 bot.start();

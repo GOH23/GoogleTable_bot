@@ -11,9 +11,14 @@
   "license": "ISC",
   "dependencies": {
     "@grammyjs/conversations": "^1.2.0",
+    "class-validator": "^0.14.1",
     "dotenv": "^16.4.5",
     "google-auth-library": "^9.13.0",
     "google-spreadsheet": "^4.1.2",
-    "grammy": "^1.28.0"
+    "grammy": "^1.28.0",
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "@types/lodash": "^4.17.7"
   }
 }
